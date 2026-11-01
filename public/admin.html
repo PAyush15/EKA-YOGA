@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Studio Admin</title><link rel="stylesheet" href="./styles.css"/><script defer src="./admin.js"></script></head>
+<body class="admin-body">
+  <main class="admin-shell">
+    <div class="admin-head"><div><div class="eyebrow">PRIVATE STUDIO DASHBOARD</div><h1>Manage your studio</h1><p>Add classes, schedule sessions and review reservations.</p></div><a class="nav-admin" href="/">← Booking website</a></div>
+    <div class="notice" style="margin-bottom:18px">Note: New session times are entered in your computer's local time zone. Set your computer to the studio's time zone before scheduling. Cancelling a session or booking does not automatically email attendees in this starter.</div>
+    <div id="adminMessage" class="admin-toast" role="status" hidden></div>
+    <div class="admin-grid">
+      <section class="admin-card"><h2>Create a course</h2>
+        <form id="courseForm">
+          <label>Class title<input name="title" required maxlength="120" placeholder="e.g. Morning Hatha Yoga" /></label>
+          <label>Short description<textarea name="description" rows="3" maxlength="1000" placeholder="What should students expect?"></textarea></label>
+          <div class="form-row"><label>Category<input name="category" maxlength="45" value="Yoga"/></label><label>Duration (minutes)<input name="duration_minutes" type="number" min="15" max="360" value="60" required/></label></div>
+          <div class="form-row"><label>Maximum students<input name="capacity" type="number" min="1" max="200" value="10" required/></label><label>Displayed price (€)<input name="price_eur" type="number" min="0" step="0.01" value="0.00" required/></label></div>
+          <button class="primary-btn" type="submit">Add course <span>→</span></button>
+        </form>
+      </section>
+      <section class="admin-card"><h2>Schedule a session</h2>
+        <form id="sessionForm"><label>Course<select id="courseSelect" name="course_id" required></select></label>
+          <label>Start (your computer's local time)<input name="starts_at" type="datetime-local" required/></label>
+          <label>End (your computer's local time)<input name="ends_at" type="datetime-local" required/></label>
+          <button type="submit" class="primary-btn">Publish time slot <span>→</span></button>
+        </form>
+        <p class="privacy">This creates one session. Add more dates as needed. A recurring weekly scheduling tool can be added later.</p>
+      </section>
+      <section class="admin-card admin-wide"><h2>Published courses</h2><div id="coursesTable" class="admin-table">Loading…</div></section>
+      <section class="admin-card admin-wide"><h2>Upcoming sessions</h2><div id="sessionsTable" class="admin-table">Loading…</div></section>
+      <section class="admin-card admin-wide"><h2>Recent reservations</h2><div id="bookingsTable" class="admin-table">Loading…</div></section>
+    </div>
+  </main>
+</body></html>
