@@ -60,8 +60,7 @@ function renderDays(){
     const row=document.createElement('details'); row.dataset.day=day;row.open=open ? day===open : i===0;
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
-    for(let hour=7;hour<=19;hour++){
-      const time=String(hour).padStart(2,'0')+':00';
+    for(const time of ['08:00','10:00','14:00','17:30']){
       const b=button(time,()=>pick(day,time));b.disabled=!available(startFor(day,time));slots.append(b);
     }
     const custom=node('div','','custom-time');custom.hidden=true;

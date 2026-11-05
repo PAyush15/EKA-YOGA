@@ -22,15 +22,15 @@ function doPost(e) {
     const booking = String(payload.id || '');
     const details = course + '\n' + zoned + ' · ' + payload.duration + ' minutes\nBooking reference: ' + booking;
     const customerBody = payload.paid
-      ? 'Your payment has been received and your yoga session is confirmed. See you on the mat!'
-      : "You're almost there! We've held your time for you. " + payload.instructions +
+      ? 'Your payment has been received and your at-home yoga session is confirmed. I’ll come to you for the class.'
+      : "You're almost there! We've held a time for your at-home yoga session. " + payload.instructions +
         (payload.paymentUrl ? '\n\nComplete your payment: ' + payload.paymentUrl : '');
     const messages = [
       {
         to: String(payload.email), replyTo: admin,
         subject: (payload.paid ? 'Your yoga session is confirmed' : 'Your yoga session is reserved — payment pending') + ' | ' + studio,
         body: 'Hi ' + payload.firstName + ',\n\n' + customerBody + '\n\n' + details +
-          '\n\nQuestions about your session? Reply to this email.\n' + studio
+          '\n\nPlease reply with the address for your session if you haven’t already shared it.\n' + studio
       },
       {
         to: admin,
