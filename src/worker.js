@@ -45,9 +45,9 @@ async function notify(env, booking) {
       method: 'POST',
       headers: { 'content-type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ secret: env.NOTIFY_SHARED_SECRET, studioName: env.STUDIO_NAME || 'Yoga Studio',
-        studioTimezone: env.STUDIO_TIMEZONE || 'Europe/Berlin', ...booking })
+        studioTimezone: env.STUDIO_TIMEZONE || 'America/Chicago', ...booking })
     });
-    if (!res.ok) console.error('Email notification webhook error', res.status);
+    if (!res.ok || (await res.text()).trim() !== 'OK') console.error('Email notification webhook error', res.status);
   } catch (error) { console.error('Email notification failed', String(error)); }
 }
 
@@ -71,7 +71,7 @@ export default {
       if (!env.DB) return INVALID('Database not configured.', 503);
 
       if (request.method === 'GET' && path === '/api/config')
-        return json({ studioName: env.STUDIO_NAME || 'Yoga Studio', timezone: env.STUDIO_TIMEZONE || 'Europe/Berlin' });
+        return json({ studioName: env.STUDIO_NAME || 'Yoga Studio', timezone: env.STUDIO_TIMEZONE || 'America/Chicago', whatsapp: env.WHATSAPP_NUMBER || '' });
 
       if (request.method === 'GET' && path === '/api/courses') {
         const { results } = await env.DB.prepare(`${courseSelect} WHERE active = 1 ORDER BY id`).all();
@@ -90,54 +90,75 @@ export default {
         return json({ sessions: results.map(r => ({ ...r, remaining: Math.max(0, r.capacity - r.reserved) })) });
       }
 
+      if (request.method === 'GET' && path === '/api/busy') {
+        const {results} = await env.DB.prepare(`SELECT DISTINCT s.starts_at, s.ends_at FROM sessions s
+          JOIN bookings b ON b.session_id=s.id
+          WHERE s.cancelled=0 AND b.status='confirmed' AND s.ends_at >= ? ORDER BY s.starts_at`)
+          .bind(new Date().toISOString()).all();
+        return json({intervals:results});
+      }
+
       if (request.method === 'POST' && path === '/api/bookings') {
-        if (!sameOrigin(request)) return INVALID('Invalid request origin.', 403);
-        const data = await parseJSON(request);
-        const id = Number(data.session_id);
-        const first = safeString(data.first_name, 70);
-        const last = safeString(data.last_name, 70);
-        const email = cleanEmail(data.email);
-        const phone = safeString(data.phone, 50);
-        const website = safeString(data.website, 200); // honeypot field: must remain empty
-        if (website) return INVALID('Unable to create booking.', 400);
-        if (!Number.isSafeInteger(id) || id < 1 || !first || !last || !email) return INVALID('Enter valid name, email and class.', 400);
-        const bookingId = crypto.randomUUID();
-        let result;
-        try {
-          // Single conditional INSERT enforces class capacity atomically in D1.
-          result = await env.DB.prepare(`INSERT INTO bookings
-              (id, session_id, first_name, last_name, email, phone)
-            SELECT ?, s.id, ?, ?, ?, ? FROM sessions s
-            JOIN courses c ON c.id = s.course_id
-            WHERE s.id = ? AND s.cancelled = 0 AND c.active = 1
-              AND s.starts_at > ?
-              AND (SELECT COUNT(*) FROM bookings b WHERE b.session_id = s.id
-                   AND b.status = 'confirmed') < COALESCE(s.capacity_override, c.capacity)`)
-            .bind(bookingId, first, last, email, phone, id, new Date().toISOString()).run();
-        } catch (error) {
-          if (String(error).includes('UNIQUE constraint')) return INVALID('This email is already registered for that class.', 409);
-          throw error;
-        }
-        if (!result.meta?.changes) return INVALID('This class is full, unavailable or has already started.', 409);
-        const row = await env.DB.prepare(`${sessionSelect} WHERE s.id = ?`).bind(id).first();
-        const notification = { id: bookingId, firstName: first, lastName: last, email, phone,
-          course: row.course_title, startsAt: row.starts_at, endsAt: row.ends_at,
-          remaining: Math.max(0, row.capacity - row.reserved), origin: url.origin };
-        ctx.waitUntil(notify(env, notification));
-        return json({ id: bookingId, course: row.course_title, starts_at: row.starts_at,
-          ends_at: row.ends_at, email, remaining: notification.remaining }, 201);
+        if (!sameOrigin(request)) return INVALID('Invalid origin.',403);
+        const d = await parseJSON(request);
+        const first = safeString(d.first_name,70), last = safeString(d.last_name,70);
+        const email = cleanEmail(d.email), phone = safeString(d.phone,50);
+        if (!first || !last || !email || !/^[+\d(). -]+$/.test(phone) || phone.replace(/\D/g,'').length < 7 || d.website)
+          return INVALID('Enter your name, email and phone number.');
+        const duration = d.minutes, start = d.starts_at;
+        if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+48*3600000 ||
+            !Number.isInteger(duration) || duration < 15 || duration > 360) return INVALID('Choose a time at least 48 hours ahead and a duration of 15–360 minutes.');
+        const clock = new Intl.DateTimeFormat('en-GB',{timeZone:env.STUDIO_TIMEZONE,hour:'2-digit',minute:'2-digit'}).format(new Date(start));
+        if (clock < '07:00' || clock > '19:00') return INVALID('Choose an Austin start time between 07:00 and 19:00.');
+        const course = await env.DB.prepare('SELECT * FROM courses WHERE id=? AND active=1').bind(Number(d.course_id)||0).first();
+        if (!course) return INVALID('Class unavailable.');
+        const end = new Date(Date.parse(start)+duration*60000).toISOString();
+        const id = crypto.randomUUID();
+        // D1 executes the batch as one transaction. An existing active interval
+        // blocks every course, including a second booking for the same party.
+        const busy = `EXISTS (SELECT 1 FROM sessions x JOIN bookings b ON b.session_id=x.id
+          WHERE x.cancelled=0 AND b.status='confirmed' AND x.starts_at < ? AND x.ends_at > ?)`;
+        const [,reservation] = await env.DB.batch([
+          env.DB.prepare(`INSERT INTO sessions(course_id,starts_at,ends_at)
+            SELECT ?,?,? WHERE NOT ${busy}
+            ON CONFLICT(course_id,starts_at) DO UPDATE SET ends_at=excluded.ends_at,cancelled=0
+            WHERE NOT EXISTS (SELECT 1 FROM bookings WHERE session_id=sessions.id AND status='confirmed')`)
+            .bind(course.id,start,end,end,start),
+          env.DB.prepare(`INSERT INTO bookings(id,session_id,first_name,last_name,email,phone)
+            SELECT ?,s.id,?,?,?,? FROM sessions s JOIN courses c ON c.id=s.course_id
+            WHERE c.active=1 AND s.course_id=? AND s.starts_at=? AND s.ends_at=? AND s.cancelled=0 AND NOT ${busy}`)
+            .bind(id,first,last,email,phone,course.id,start,end,end,start)
+        ]);
+        if (!reservation.meta.changes) return INVALID('That time is unavailable. Choose another start time.',409);
+        const standard = duration === course.duration_minutes;
+        const paymentUrl = standard && /^https:\/\//.test(env.PAYMENT_URL || '') ? env.PAYMENT_URL : '';
+        const instructions = !standard ? 'The studio will confirm the price for your selected duration before payment.' :
+          paymentUrl ? 'Pay $'+(course.price_cents/100).toFixed(2)+' using the payment link.' : 'The studio will send you payment instructions.';
+        ctx.waitUntil(notify(env,{id,firstName:first,lastName:last,email,phone,course:course.title,startsAt:start,endsAt:end,duration,instructions,paymentUrl}));
+        return json({id,instructions,paymentUrl,qr:paymentUrl ? env.PAYMENT_QR_PATH || '' : ''},201);
       }
 
       // Everything below requires administrator HTTP Basic authentication.
       if (path.startsWith('/api/admin/')) {
         if (!adminOK(request, env)) return demandAdmin();
         if (request.method !== 'GET' && !sameOrigin(request)) return INVALID('Invalid request origin.', 403);
+        if (request.method === 'POST' && /^\/api\/admin\/bookings\/[a-f0-9-]+\/paid$/.test(path)) {
+          const id = path.split('/')[4];
+          const paid = await env.DB.prepare(`INSERT OR IGNORE INTO payments(booking_id,paid_at)
+            SELECT b.id,datetime('now') FROM bookings b JOIN sessions s ON s.id=b.session_id
+            WHERE b.id=? AND b.status='confirmed' AND s.cancelled=0`).bind(id).run();
+          if (!paid.meta.changes) return INVALID('Already paid or inactive reservation.',409);
+          const row = await env.DB.prepare(`SELECT b.email,b.first_name,s.starts_at,c.title FROM bookings b
+            JOIN sessions s ON s.id=b.session_id JOIN courses c ON c.id=s.course_id WHERE b.id=?`).bind(id).first();
+          ctx.waitUntil(notify(env,{id,paid:true,firstName:row.first_name,email:row.email,startsAt:row.starts_at,course:row.title}));
+          return json({ok:true});
+        }
         if (request.method === 'GET' && path === '/api/admin/overview') {
           const [courses, sessions, bookings] = await Promise.all([
             env.DB.prepare(`${courseSelect} ORDER BY id DESC`).all(),
             env.DB.prepare(`${sessionSelect} WHERE s.starts_at >= ? ORDER BY s.starts_at LIMIT 200`).bind(new Date().toISOString()).all(),
             env.DB.prepare(`SELECT b.id, b.session_id, b.first_name, b.last_name, b.email, b.phone, b.status,
-              b.created_at, s.starts_at, c.title AS course_title
+              (SELECT paid_at FROM payments WHERE booking_id=b.id) AS paid_at, b.created_at, s.starts_at, c.title AS course_title
               FROM bookings b JOIN sessions s ON s.id=b.session_id
               JOIN courses c ON c.id=s.course_id ORDER BY b.created_at DESC LIMIT 300`).all()
           ]);
@@ -157,7 +178,7 @@ export default {
               !Number.isInteger(price) || price < 0 || price > 10000000)
             return INVALID('Invalid course details.');
           const r = await env.DB.prepare(`INSERT INTO courses (title, description, category, duration_minutes, capacity, price_cents, currency)
-            VALUES (?, ?, ?, ?, ?, ?, 'EUR')`).bind(title, description, category, duration, capacity, price).run();
+            VALUES (?, ?, ?, ?, ?, ?, 'USD')`).bind(title, description, category, duration, capacity, price).run();
           return json({ id: r.meta.last_row_id }, 201);
         }
         if (request.method === 'PATCH' && /^\/api\/admin\/courses\/\d+$/.test(path)) {
@@ -187,7 +208,7 @@ export default {
         }
         if (request.method === 'POST' && /^\/api\/admin\/sessions\/\d+\/cancel$/.test(path)) {
           const id = Number(path.split('/')[4]);
-          await env.DB.prepare('UPDATE sessions SET cancelled = 1 WHERE id = ?').bind(id).run();
+          await env.DB.batch([env.DB.prepare('UPDATE sessions SET cancelled=1 WHERE id=?').bind(id), env.DB.prepare("UPDATE bookings SET status='cancelled' WHERE session_id=?").bind(id)]);
           return json({ ok: true, note: 'Existing participants must be notified manually.' });
         }
         if (request.method === 'POST' && /^\/api\/admin\/bookings\/[a-f0-9-]+\/cancel$/.test(path)) {
@@ -205,3 +226,4 @@ export default {
     }
   }
 };
+

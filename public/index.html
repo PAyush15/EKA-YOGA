@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f7f6f0" />
   <meta name="description" content="Explore yoga courses and reserve your next class online." />
-  <title>Book a Class • Soma Yoga Studio</title>
+  <title>Book a Class • Yoga by Krunali</title>
   <link rel="stylesheet" href="./styles.css" />
   <script defer src="./app.js"></script>
 </head>
@@ -14,7 +14,7 @@
   <header class="site-header wrap">
     <a class="brand" href="/" aria-label="Home">
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 45 45" fill="none"><path d="M22.5 36C7.7 29.8 11 16.8 22.5 8c11.5 8.8 14.8 21.8 0 28Z" stroke="currentColor" stroke-width="1.7"/><path d="M22.5 12v24M22.5 28c-7-8-13-8-15-7M22.5 28c7-8 13-8 15-7" stroke="currentColor" stroke-width="1.3"/></svg></span>
-      <span><strong id="brandName">soma</strong><small>YOGA STUDIO</small></span>
+      <span><strong id="brandName">Yoga by Krunali</strong><small>AUSTIN, TEXAS</small></span>
     </a>
     <nav><a href="#classes">Classes</a><a href="#about">How it works</a><a class="nav-admin" href="/admin">Studio login ↗</a></nav>
   </header>
@@ -47,7 +47,7 @@
         <aside class="course-panel">
           <div class="panel-label"><span>01</span><h3>Choose your practice</h3></div>
           <div id="courseList" class="course-list"><div class="loading">Loading classes…</div></div>
-          <p class="side-footnote">All levels welcome. Reserve a space that feels right for you.</p>
+          <div id="lengthBox" hidden><label>Session length<select id="duration"></select></label><label id="customBox" hidden>Custom duration (minutes)<input type="number" id="minutes" value="75" min="15" max="360"></label><p id="rateNote"></p></div>
         </aside>
         <div class="booking-panel">
           <div class="progress"><span class="progress-step active" id="p1">1 <span>Class</span></span><span class="progress-line"></span><span class="progress-step" id="p2">2 <span>Time</span></span><span class="progress-line"></span><span class="progress-step" id="p3">3 <span>Details</span></span></div>
@@ -55,10 +55,7 @@
           <div id="dateStep" hidden>
             <div class="selected-course" id="selectedCourse"></div>
             <div class="panel-label"><span>02</span><h3>Select a date & time</h3></div>
-            <div class="calendar-bar"><button id="prevMonth" class="icon-button" aria-label="Previous month">←</button><h3 id="monthLabel">Month</h3><button id="nextMonth" class="icon-button" aria-label="Next month">→</button></div>
-            <div class="calendar" id="calendar" role="group" aria-label="Available class dates"></div>
-            <div class="time-heading"><h4>Available times</h4><span id="timezoneLabel"></span></div>
-            <div id="timeList" class="time-list"><span class="muted">Select a date to see available times.</span></div>
+            <p>Austin time · Book at least 48 hours ahead.</p><div id="days"></div><button class="back-link" id="prev">← Previous week</button> <button class="back-link" id="next">Next week →</button>
           </div>
           <div id="detailsStep" hidden>
             <button id="backButton" type="button" class="back-link">← Change date or time</button>
@@ -66,20 +63,22 @@
             <div id="bookingSummary" class="booking-summary"></div>
             <form id="bookingForm">
               <div class="form-row"><label>First name <span>*</span><input name="first_name" autocomplete="given-name" required maxlength="70" /></label><label>Last name <span>*</span><input name="last_name" autocomplete="family-name" required maxlength="70" /></label></div>
-              <div class="form-row"><label>Email address <span>*</span><input type="email" name="email" autocomplete="email" required maxlength="200" /></label><label>Phone (optional)<input type="tel" name="phone" autocomplete="tel" maxlength="50" /></label></div>
+              <div class="form-row"><label>Email address <span>*</span><input type="email" name="email" autocomplete="email" required maxlength="200" /></label><label>Phone / WhatsApp *<input type="tel" required name="phone" autocomplete="tel" maxlength="50" /></label></div>
               <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
-              <p class="privacy">We use your information only to manage your booking and send related messages. Add your studio's privacy policy before launching.</p>
+              <p class="privacy">We use your information only to manage your booking and send related messages.</p>
               <div id="formError" role="alert" class="form-error" hidden></div>
               <button id="submitBooking" type="submit" class="primary-btn">Confirm reservation <span>→</span></button>
-              <p class="payment-note">This starter reserves a class without taking online payment.</p>
+              <p class="payment-note">Payment follows your reservation.</p>
             </form>
           </div>
-          <div id="successStep" class="success-step" hidden><div class="success-icon">✓</div><h2>You're booked!</h2><p id="confirmationText"></p><div id="confirmationCode" class="confirmation-code"></div><button id="bookAnother" class="primary-btn">Book another class <span>→</span></button></div>
+          <div id="successStep" class="success-step" hidden><div class="success-icon">✓</div><h2>Reserved · Payment pending</h2><p id="confirmationText"></p><div id="confirmationCode" class="confirmation-code"></div><div id="payment"></div><button id="bookAnother" class="primary-btn">Book another class <span>→</span></button></div>
         </div>
       </div>
     </section>
     <section class="footer-info" id="about"><div class="wrap footer-info-grid"><div><div class="eyebrow">A MORE MINDFUL ROUTINE</div><h2>Start where you are.<br><em>Grow from there.</em></h2></div><div><h3>What to expect</h3><p>Choose a class, select one of our available sessions, and reserve your mat. No account needed. Please arrive a few minutes early and bring comfortable clothing and a water bottle.</p></div></div></section>
   </main>
-  <footer class="site-footer wrap"><span>© <span id="year"></span> <span id="footerStudio">Soma Yoga Studio</span></span><span>Built for mindful moments. <a href="/admin">Admin ↗</a></span></footer>
+  <footer class="site-footer wrap"><span>© <span id="year"></span> <span id="footerStudio">Yoga by Krunali</span></span><span>Built for mindful moments. <a href="/admin">Admin ↗</a></span></footer>
+<a id="whatsapp" class="chat" hidden target="_blank" rel="noopener"></a>
 </body>
 </html>
+
