@@ -46,11 +46,11 @@
       <div class="booking-layout">
         <aside class="course-panel">
           <div class="panel-label"><span>01</span><h3>Choose your practice</h3></div>
-          <div id="courseList" class="course-list"><article class="course-card"><strong>Private yoga (1 : 1)</strong><p>Personalized class according to your medical condition, chronic pain or other health concern with suitable poses and modifications to support your comfort and abilities.</p><p>60 min · $80.00</p><button type="button" class="back-link" data-practice="Private yoga (1 : 1)">Book</button></article>
-<article class="course-card"><strong>Small Group Yoga</strong><p>Practice yoga together while receiving the personal attention you deserve. I’ll guide you with modifications to suit each person’s needs and goals. (Maximum 5 people)</p><p>70 min · $50.00</p><button type="button" class="back-link" data-practice="Small Group Yoga">Book</button></article>
-<article class="course-card"><strong>Foundation Class</strong><p>In this class, Each pose will explain and demonstrated in detail, with a focus on proper alignment, breathing techniques, and step-by-step guidance. so you can get much benefits and avoid mistakes. (Everyone is welcome)</p><p>60 min · $100.00</p><button type="button" class="back-link" data-practice="Foundation Class">Book</button></article>
-<article class="course-card"><strong>Group Yoga Session</strong><p>Exercises for all over body. Bring your mat, Room temperature water bottle, Towel, Comfy cloths and most importantly, Bring yourself. (10 people Max)</p><p>70 min · $85.00</p><button type="button" class="back-link" data-practice="Group Yoga Session">Book</button></article>
-<article class="course-card"><strong>Office Workers session</strong><p>Designed especially for office workers, these sessions focus on desk-related stiffness, neck and shoulder tension, posture, and stress relief. (4 people max)</p><p>60 min · $50.00</p><button type="button" class="back-link" data-practice="Office Workers session">Book</button></article></div>
+          <div id="courseList" class="course-list"><article class="course-card" data-minutes="60" data-cents="8000"><strong>Private yoga (1 : 1)</strong><p>Personalized class according to your medical condition, chronic pain or other health concern with suitable poses and modifications to support your comfort and abilities.</p><p>60 min · $80.00</p><button type="button" class="book-course" aria-label="Book Private yoga (1 : 1)">Book class →</button></article>
+<article class="course-card" data-minutes="70" data-cents="5000"><strong>Small Group Yoga</strong><p>Practice yoga together while receiving the personal attention you deserve. I’ll guide you with modifications to suit each person’s needs and goals. (Maximum 5 people)</p><p>70 min · $50.00</p><button type="button" class="book-course" aria-label="Book Small Group Yoga">Book class →</button></article>
+<article class="course-card" data-minutes="60" data-cents="10000"><strong>Foundation Class</strong><p>In this class, Each pose will explain and demonstrated in detail, with a focus on proper alignment, breathing techniques, and step-by-step guidance. so you can get much benefits and avoid mistakes. (Everyone is welcome)</p><p>60 min · $100.00</p><button type="button" class="book-course" aria-label="Book Foundation Class">Book class →</button></article>
+<article class="course-card" data-minutes="70" data-cents="8500"><strong>Group Yoga Session</strong><p>Exercises for all over body. Bring your mat, Room temperature water bottle, Towel, Comfy cloths and most importantly, Bring yourself. (10 people Max)</p><p>70 min · $85.00</p><button type="button" class="book-course" aria-label="Book Group Yoga Session">Book class →</button></article>
+<article class="course-card" data-minutes="60" data-cents="5000"><strong>Office Workers session</strong><p>Designed especially for office workers, these sessions focus on desk-related stiffness, neck and shoulder tension, posture, and stress relief. (4 people max)</p><p>60 min · $50.00</p><button type="button" class="book-course" aria-label="Book Office Workers session">Book class →</button></article></div>
           <div id="lengthBox" hidden><label>Session length<select id="duration"></select></label><label id="customBox" hidden>Custom duration (minutes)<input type="number" id="minutes" value="75" min="15" max="360"></label><p id="rateNote"></p></div>
         </aside>
         <div class="booking-panel">
@@ -59,13 +59,13 @@
           <div id="dateStep" hidden>
             <div class="selected-course" id="selectedCourse"></div>
             <div class="panel-label"><span>02</span><h3>Select a date & time</h3></div>
-            <p>Austin time · Book at least 48 hours ahead.</p><div id="days"></div><button class="back-link" id="prev">← Previous week</button> <button class="back-link" id="next">Next week →</button>
+            <p>Austin time · Book at least 48 hours ahead.</p><p id="availabilityNote" role="status"></p><div id="days"></div><button class="back-link" id="prev">← Previous week</button> <button class="back-link" id="next">Next week →</button>
           </div>
           <div id="detailsStep" hidden>
             <button id="backButton" type="button" class="back-link">← Change date or time</button>
             <div class="panel-label"><span>03</span><h3>Your information</h3></div>
             <div id="bookingSummary" class="booking-summary"></div>
-            <form id="bookingForm">
+            <p id="previewDetails" hidden>Schedule preview only. A live studio connection is required to reserve this time.</p><form id="bookingForm">
               <div class="form-row"><label>First name <span>*</span><input name="first_name" autocomplete="given-name" required maxlength="70" /></label><label>Last name <span>*</span><input name="last_name" autocomplete="family-name" required maxlength="70" /></label></div>
               <div class="form-row"><label>Email address <span>*</span><input type="email" name="email" autocomplete="email" required maxlength="200" /></label><label>Phone / WhatsApp *<input type="tel" required name="phone" autocomplete="tel" maxlength="50" /></label></div>
               <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>

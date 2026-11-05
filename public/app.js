@@ -4,6 +4,8 @@ const zone = 'America/Chicago', dayMs = 86400000;
 const dateKey = new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'});
 const dayLabel = new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'long',month:'short',day:'numeric',year:'numeric'});
 const clock = new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
+let live=false, selection=0, catalog=[];
+const pagesPreview=location.hostname.endsWith('.github.io') || location.protocol==='file:';
 let course, selected, intervals=[], week=0;
 function node(tag,text,cls){
   const n=document.createElement(tag); n.textContent=text;
@@ -41,7 +43,9 @@ function pick(day,time){
   if(!available(start)){notice('Choose an available time and a duration of 15–360 minutes.');return;}
   selected=new Date(start).toISOString();
   $('bookingSummary').textContent=course.title+' · '+day+' · '+time+' Austin time · '+minutes()+' min · '+$('rateNote').textContent;
-  $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').elements.first_name.focus();
+  $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').hidden=!live;
+  $('previewDetails').hidden=live;
+  if(live)$('bookingForm').elements.first_name.focus();else $('detailsStep').scrollIntoView({block:'start'});
 }
 function renderDays(){
   const open=$('days').querySelector('details[open]')?.dataset.day;
@@ -51,7 +55,7 @@ function renderDays(){
   const first=Date.parse(dateKey.format(new Date(Date.now()+2*dayMs))+'T12:00:00Z');
   for(let i=0;i<7;i++){
     const date=new Date(first+(week*7+i)*dayMs), day=date.toISOString().slice(0,10);
-    const row=document.createElement('details'); row.dataset.day=day;row.open=day===open;
+    const row=document.createElement('details'); row.dataset.day=day;row.open=open ? day===open : i===0;
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
     for(let hour=7;hour<=19;hour++){
@@ -66,18 +70,33 @@ function renderDays(){
 }
 async function refresh(){intervals=(await api('/api/busy')).intervals.map(x=>({start:Date.parse(x.starts_at),end:Date.parse(x.ends_at)}));}
 async function choose(c){
-  try{await refresh();course=c;week=0;notice('');$('duration').replaceChildren();
+  const token=++selection;
+  course=c;week=0;live=false;intervals=[];notice('');$('duration').replaceChildren();
     for(const m of new Set([c.duration_minutes,60,90,120,'custom'])){
       $('duration').add(new Option(({60:'1 hour',90:'1.5 hours',120:'2 hours',custom:'Custom duration'})[m]||m+' minutes',m));
     }
-    $('selectedCourse').textContent=c.title;step('dateStep');renderDays();$('dateStep').scrollIntoView({block:'nearest'});
-  }catch(e){notice(e.message);}
+  $('selectedCourse').textContent=c.title;
+  step('dateStep');renderDays();
+  $('dateStep').scrollIntoView({block:'start'});
+  $('availabilityNote').textContent=pagesPreview?'Preview times · Reservations open on the live studio site.':'Checking studio availability…';
+  if(pagesPreview)return;
+  try{
+    const courses=catalog.length?catalog:await loadCourses();
+    const match=courses.find(item=>c.id ? item.id===c.id : item.title===c.title);
+    const {intervals:busy}=await api('/api/busy',{signal:AbortSignal.timeout(8000)});
+    if(token!==selection)return;
+    if(!match)throw Error('Course unavailable');
+    course=match;intervals=busy.map(x=>({start:Date.parse(x.starts_at),end:Date.parse(x.ends_at)}));
+    live=true;$('availabilityNote').textContent='';
+    renderDays();
+    if(!$('detailsStep').hidden){step('dateStep');}
+  }catch{if(token===selection)$('availabilityNote').textContent='Preview times · Live availability could not be verified.';}
 }
 $('duration').onchange=renderDays;$('minutes').oninput=renderDays;
 $('prev').onclick=()=>{week=Math.max(0,week-1);renderDays();};$('next').onclick=()=>{week++;renderDays();};
 $('backButton').onclick=()=>{step('dateStep');renderDays();};
 $('bookingForm').onsubmit=async e=>{
-  e.preventDefault();$('submitBooking').disabled=true;
+  e.preventDefault();if(!live)return;$('submitBooking').disabled=true;
   try{
     const data=await api('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),course_id:course.id,starts_at:selected,minutes:minutes()})});
     $('confirmationText').textContent=$('bookingSummary').textContent+' · '+data.instructions;
@@ -95,7 +114,8 @@ function renderCatalog(courses) {
     const card=node('article','','course-card');
     card.append(node('strong',c.title),node('p',c.description),
       node('p',c.duration_minutes+' min · $'+(c.price_cents/100).toFixed(2)),
-      button('Book',()=>choose(c),'back-link'));
+      node('button','Book class →','book-course'));
+    card.dataset.id=c.id;card.dataset.minutes=c.duration_minutes;card.dataset.cents=c.price_cents;
     return card;
   });
   $('courseList').replaceChildren(...cards);
@@ -105,27 +125,18 @@ function renderCatalog(courses) {
 async function loadCourses() {
   const {courses}=await api('/api/courses',{signal:AbortSignal.timeout(8000)});
   if(!Array.isArray(courses)) throw Error('Invalid catalog');
-  renderCatalog(courses);
+  catalog=courses;renderCatalog(courses);
   return courses;
 }
 
-// The published catalog can be browsed even when only static files are served.
-// Resolve a live course ID before opening the calendar for a reservation.
-$('courseList').addEventListener('click',async event=>{
-  const target=event.target.closest('[data-practice]');
-  if(!target)return;
-  const title=target.dataset.practice;
-  target.disabled=true;
-  try{
-    const courses=await loadCourses();
-    const match=courses.find(c=>c.title===title);
-    if(match)await choose(match);
-  }catch{
-    $('choosePrompt').querySelector('h3').textContent=title;
-    $('choosePrompt').querySelector('p').textContent='Online reservations are currently offline.';
-  }finally{target.disabled=false;}
+$('courseList').addEventListener('click',event=>{
+  const card=event.target.closest('.course-card');
+  if(!card)return;
+  for(const other of $('courseList').children)other.classList.toggle('active',other===card);
+  choose({id:Number(card.dataset.id)||null,title:card.querySelector('strong').textContent,
+    duration_minutes:Number(card.dataset.minutes),price_cents:Number(card.dataset.cents)});
 });
-loadCourses().catch(()=>{}); // Keep the published cards when the live catalog cannot be reached.
+if(!pagesPreview)loadCourses().catch(()=>{});
 api('/api/config').then(cfg=>{
   const digits=(cfg.whatsapp || '').replace(/\D/g,'');
   if(/^\d{8,15}$/.test(digits)){
