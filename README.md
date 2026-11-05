@@ -30,4 +30,5 @@ npx wrangler secret put NOTIFY_WEBHOOK_URL
 npx wrangler secret put NOTIFY_SHARED_SECRET
 ```
 
-Enter the /exec URL and the matching secret respectively. Keep credentials outside GitHub. A booking triggers a studio notification and a customer reservation email with payment instructions. Mark paid triggers a separate customer email. Delivery is best effort without retries. Make one test reservation and verify both inboxes before sharing the site.
+Enter the /exec URL and the matching secret respectively. Keep credentials outside GitHub. A booking triggers a studio notification and a customer reservation email with payment instructions. After verifying the transfer, open /admin → Recent reservations → Mark paid. This updates Upcoming sessions to Paid · Confirmed and triggers separate confirmation emails to both recipients. If the Apps Script web app already exists, update its deployment to a new version after replacing Code.gs. GitHub Pages is a browser-only demo and does not send mail. Delivery is best effort without retries. Make one test reservation and verify both inboxes before sharing the site.
+

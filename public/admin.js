@@ -19,7 +19,7 @@ function render(){
   $('coursesTable').innerHTML=table(['Title','Length','Capacity','Price','Status','Action'],state.courses.map(c=>
     `<tr><td>${esc(c.title)}</td><td>${c.duration_minutes} min</td><td>${c.capacity}</td><td>$${(c.price_cents/100).toFixed(2)}</td><td><span class="badge ${c.active?'':'off'}">${c.active?'Published':'Hidden'}</span></td><td><button class="small-button" data-course="${c.id}" data-active="${c.active?'false':'true'}">${c.active?'Hide':'Publish'}</button></td></tr>`));
   $('sessionsTable').innerHTML=table(['Course','Date and time (Austin)','Reserved','Status','Action'],state.sessions.map(s=>
-    `<tr><td>${esc(s.course_title)}</td><td>${esc(displayDate(s.starts_at))}</td><td>${s.reserved} / ${s.capacity}</td><td><span class="badge ${s.cancelled?'off':''}">${s.cancelled?'Cancelled':'Scheduled'}</span></td><td>${s.cancelled?'—':`<button class="small-button danger" data-session="${s.id}">Cancel session</button>`}</td></tr>`));
+    `<tr><td>${esc(s.course_title)}</td><td>${esc(displayDate(s.starts_at))}</td><td>${s.reserved} / ${s.capacity}</td><td><span class="badge ${s.cancelled?'off':''}">${s.cancelled?'Cancelled':!s.reserved?'Open':s.paid?'Paid · Confirmed':'Reserved · Payment pending'}</span></td><td>${s.cancelled?'—':`<button class="small-button danger" data-session="${s.id}">Cancel session</button>`}</td></tr>`));
   $('bookingsTable').innerHTML=table(['Customer','Class / date','Email','Phone','Status','Action'],state.bookings.map(b=>
     `<tr><td>${esc(b.first_name+' '+b.last_name)}</td><td>${esc(b.course_title)}<br>${esc(displayDate(b.starts_at))}</td><td>${esc(b.email)}</td><td>${esc(b.phone)}</td><td><span class="badge ${b.status==='cancelled'?'off':''}">${b.status==='cancelled'?'Cancelled':b.paid_at?'Paid':'Payment pending'}</span></td><td>${b.status==='cancelled'?'—':`${b.paid_at?'':'<button class="small-button" data-paid="'+esc(b.id)+'">Mark paid</button>'}<button class="small-button danger" data-booking="${esc(b.id)}">Cancel</button>`}</td></tr>`));
 }
@@ -46,4 +46,5 @@ document.addEventListener('click',async e=>{
   }catch(err){msg(err.message,true);}
 });
 refresh().catch(e=>msg(`Could not load admin data: ${e.message}`,true));
+
 

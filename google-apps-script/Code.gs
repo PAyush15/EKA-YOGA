@@ -20,25 +20,38 @@ function doPost(e) {
     const zoned = Utilities.formatDate(new Date(payload.startsAt), String(payload.studioTimezone || 'America/Chicago'), 'EEE, dd MMM yyyy, HH:mm z');
     const studio = String(payload.studioName || 'Yoga Studio');
     const booking = String(payload.id || '');
-    if (payload.paid) {
-      MailApp.sendEmail(String(payload.email), 'Payment received — ' + studio,
-        'Hello ' + payload.firstName + ', your payment has been recorded for ' + course + ' on ' + zoned + '. Booking reference: ' + booking);
-      return ContentService.createTextOutput('OK');
+    const details = course + '\n' + zoned + ' · ' + payload.duration + ' minutes\nBooking reference: ' + booking;
+    const customerBody = payload.paid
+      ? 'Your payment has been received and your yoga session is confirmed. See you on the mat!'
+      : "You're almost there! We've held your time for you. " + payload.instructions +
+        (payload.paymentUrl ? '\n\nComplete your payment: ' + payload.paymentUrl : '');
+    const messages = [
+      {
+        to: String(payload.email), replyTo: admin,
+        subject: (payload.paid ? 'Your yoga session is confirmed' : 'Your yoga session is reserved — payment pending') + ' | ' + studio,
+        body: 'Hi ' + payload.firstName + ',\n\n' + customerBody + '\n\n' + details +
+          '\n\nQuestions about your session? Reply to this email.\n' + studio
+      },
+      {
+        to: admin,
+        subject: (payload.paid ? 'Payment confirmed' : 'New booking · Payment pending') + ' | ' + course,
+        body: name.trim() + (payload.paid ? ' is confirmed as paid on your studio schedule.' :
+          ' reserved this session. After you verify payment, open Recent reservations and choose Mark paid.') +
+          '\n\n' + details + '\nEmail: ' + payload.email + '\nPhone / WhatsApp: ' + (payload.phone || 'Not provided')
+      }
+    ];
+    // Attempt both deliveries even when one recipient fails.
+    let failed = false;
+    for (const message of messages) {
+      try { MailApp.sendEmail(message); }
+      catch (error) { failed = true; console.error('Booking email failed for reference ' + booking); }
     }
-    MailApp.sendEmail({
-      to: admin,
-      subject: 'New booking: ' + course,
-      body: `A new yoga class was reserved.\n\nClass: ${course}\nWhen: ${zoned}\nCustomer: ${name}\nEmail: ${payload.email}\nPhone: ${payload.phone || 'Not provided'}\nDuration: ${payload.duration} minutes. Payment pending.\nBooking reference: ${booking}\n\nReview the admin dashboard to manage the booking.`
-    });
-    MailApp.sendEmail({
-      to: String(payload.email),
-      subject: 'Reserved, payment pending — ' + studio,
-      body: `Hello ${payload.firstName},\n\nYour session is reserved. Payment is pending. ${payload.instructions} ${payload.paymentUrl || ''}\n\nClass: ${course}\nWhen: ${zoned} (${payload.duration} minutes)\nReference: ${booking}\n\nWe look forward to seeing you.\n\n${studio}\n\nTo cancel, please contact the studio directly.`
-    });
+    if (failed) return ContentService.createTextOutput('ERROR');
     return ContentService.createTextOutput('OK');
   } catch (err) {
     console.error(err);
     return ContentService.createTextOutput('ERROR');
   }
 }
+
 

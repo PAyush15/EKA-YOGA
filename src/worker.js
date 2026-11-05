@@ -167,15 +167,18 @@ export default {
             SELECT b.id,datetime('now') FROM bookings b JOIN sessions s ON s.id=b.session_id
             WHERE b.id=? AND b.status='confirmed' AND s.cancelled=0`).bind(id).run();
           if (!paid.meta.changes) return INVALID('Already paid or inactive reservation.',409);
-          const row = await env.DB.prepare(`SELECT b.email,b.first_name,s.starts_at,c.title FROM bookings b
+          const row = await env.DB.prepare(`SELECT b.email,b.first_name,b.last_name,b.phone,s.starts_at,s.ends_at,c.title FROM bookings b
             JOIN sessions s ON s.id=b.session_id JOIN courses c ON c.id=s.course_id WHERE b.id=?`).bind(id).first();
-          ctx.waitUntil(notify(env,{id,paid:true,firstName:row.first_name,email:row.email,startsAt:row.starts_at,course:row.title}));
+          ctx.waitUntil(notify(env,{id,paid:true,firstName:row.first_name,lastName:row.last_name,phone:row.phone,duration:(Date.parse(row.ends_at)-Date.parse(row.starts_at))/60000,email:row.email,startsAt:row.starts_at,course:row.title}));
           return json({ok:true});
         }
         if (request.method === 'GET' && path === '/api/admin/overview') {
           const [courses, sessions, bookings] = await Promise.all([
             env.DB.prepare(`${courseSelect} ORDER BY id DESC`).all(),
-            env.DB.prepare(`${sessionSelect} WHERE s.starts_at >= ? ORDER BY s.starts_at LIMIT 200`).bind(new Date().toISOString()).all(),
+            env.DB.prepare(`SELECT upcoming.*, EXISTS (
+              SELECT 1 FROM bookings b JOIN payments p ON p.booking_id=b.id
+              WHERE b.session_id=upcoming.id AND b.status='confirmed'
+            ) AS paid FROM (${sessionSelect} WHERE s.starts_at >= ? ORDER BY s.starts_at LIMIT 200) upcoming ORDER BY starts_at`).bind(new Date().toISOString()).all(),
             env.DB.prepare(`SELECT b.id, b.session_id, b.first_name, b.last_name, b.email, b.phone, b.status,
               (SELECT paid_at FROM payments WHERE booking_id=b.id) AS paid_at, b.created_at, s.starts_at, c.title AS course_title
               FROM bookings b JOIN sessions s ON s.id=b.session_id
@@ -245,5 +248,6 @@ export default {
     }
   }
 };
+
 
 
