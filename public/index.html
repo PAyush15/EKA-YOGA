@@ -59,13 +59,13 @@
           <div id="dateStep" hidden>
             <div class="selected-course" id="selectedCourse"></div>
             <div class="panel-label"><span>02</span><h3>Select a date & time</h3></div>
-            <p>Austin time · Book at least 48 hours ahead.</p><p id="availabilityNote" role="status"></p><div id="days"></div><button class="back-link" id="prev">← Previous week</button> <button class="back-link" id="next">Next week →</button>
+            <p>Austin time · Book from 48 hours to four weeks ahead.</p><p id="availabilityNote" role="status"></p><div id="days"></div><button class="back-link" id="next">Show next week ↓</button>
           </div>
           <div id="detailsStep" hidden>
             <button id="backButton" type="button" class="back-link">← Change date or time</button>
             <div class="panel-label"><span>03</span><h3>Your information</h3></div>
             <div id="bookingSummary" class="booking-summary"></div>
-            <p id="previewDetails" hidden>Schedule preview only. A live studio connection is required to reserve this time.</p><form id="bookingForm">
+            <p id="previewDetails" hidden>Try checkout with sample details. This demo stays in your browser.</p><form id="bookingForm" method="post">
               <div class="form-row"><label>First name <span>*</span><input name="first_name" autocomplete="given-name" required maxlength="70" /></label><label>Last name <span>*</span><input name="last_name" autocomplete="family-name" required maxlength="70" /></label></div>
               <div class="form-row"><label>Email address <span>*</span><input type="email" name="email" autocomplete="email" required maxlength="200" /></label><label>Phone / WhatsApp *<input type="tel" required name="phone" autocomplete="tel" maxlength="50" /></label></div>
               <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
@@ -75,7 +75,7 @@
               <p class="payment-note">Payment follows your reservation.</p>
             </form>
           </div>
-          <div id="successStep" class="success-step" hidden><div class="success-icon">✓</div><h2>Reserved · Payment pending</h2><p id="confirmationText"></p><div id="confirmationCode" class="confirmation-code"></div><div id="payment"></div><button id="bookAnother" class="primary-btn">Book another class <span>→</span></button></div>
+          <div id="successStep" class="success-step" hidden><div class="success-icon">✓</div><h2 id="resultTitle">Reserved · Payment pending</h2><p id="confirmationText"></p><div id="confirmationCode" class="confirmation-code"></div><div id="payment"></div><button id="bookAnother" class="primary-btn">Book another class <span>→</span></button></div>
         </div>
       </div>
     </section>
@@ -85,4 +85,5 @@
 <a id="whatsapp" class="chat" hidden target="_blank" rel="noopener"></a>
 </body>
 </html>
+
 

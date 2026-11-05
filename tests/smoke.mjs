@@ -41,3 +41,16 @@ assert.equal((await req('/api/admin/bookings/'+id+'/paid','POST',{},true)).statu
 assert.equal((await req('/api/admin/bookings/'+id+'/cancel','POST',{},true)).status,200);
 assert.equal((await book(4,'17:15',70)).status,201);
 console.log('PASS: catalog, cutoff, phone, start hours, cross-course conflict, touching intervals, protected payment action, cancellation and rebooking.');
+
+const distant=new Date(Date.now()+29*86400000);
+distant.setUTCHours(18,0,0,0);
+assert.equal((await book(1,'18:00',60,{starts_at:distant.toISOString()})).status,400);
+env.ADMIN_PASSWORD='test-password:with-colon';
+const authorized=await worker.fetch(new Request('https://test.example/api/admin/overview',{headers:{authorization:'Basic '+btoa('admin:'+env.ADMIN_PASSWORD)}}),env,ctx);
+assert.equal(authorized.status,200);
+console.log('PASS: four-week advance limit and colon-containing admin password.');
+for (const [body,status] of [['null',400],['['+' '.repeat(9000)+']',413]]) {
+  const r=await worker.fetch(new Request('https://test.example/api/bookings',{method:'POST',body}),env,ctx);
+  assert.equal(r.status,status);
+}
+console.log('PASS: malformed and oversized booking bodies rejected.');

@@ -35,7 +35,7 @@ function startFor(day,time){
 }
 function available(start){
   const length=minutes();
-  return Number.isInteger(length)&&length>=15&&length<=360&&start>=Date.now()+2*dayMs &&
+  return Number.isInteger(length)&&length>=15&&length<=360&&(live || pagesPreview) && start>=Date.now()+2*dayMs && start<=Date.now()+28*dayMs &&
     !intervals.some(i=>start<i.end && start+length*60000>i.start);
 }
 function pick(day,time){
@@ -43,18 +43,20 @@ function pick(day,time){
   if(!available(start)){notice('Choose an available time and a duration of 15–360 minutes.');return;}
   selected=new Date(start).toISOString();
   $('bookingSummary').textContent=course.title+' · '+day+' · '+time+' Austin time · '+minutes()+' min · '+$('rateNote').textContent;
-  $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').hidden=!live;
+  $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').hidden=false;
   $('previewDetails').hidden=live;
-  if(live)$('bookingForm').elements.first_name.focus();else $('detailsStep').scrollIntoView({block:'start'});
+  $('submitBooking').textContent=pagesPreview?'Continue to sample payment →':'Confirm reservation →';
+  $('bookingForm').elements.first_name.focus();
 }
 function renderDays(){
   const open=$('days').querySelector('details[open]')?.dataset.day;
-  $('days').replaceChildren();$('prev').disabled=week===0;
+  $('days').replaceChildren();$('next').hidden=week>=3;
   $('customBox').hidden=$('duration').value!=='custom';
   $('rateNote').textContent=minutes()===course.duration_minutes?'$'+(course.price_cents/100).toFixed(2):'Studio will confirm the price for this duration.';
   const first=Date.parse(dateKey.format(new Date(Date.now()+2*dayMs))+'T12:00:00Z');
-  for(let i=0;i<7;i++){
-    const date=new Date(first+(week*7+i)*dayMs), day=date.toISOString().slice(0,10);
+  for(let i=0;i<7*(week+1);i++){
+    const date=new Date(first+i*dayMs), day=date.toISOString().slice(0,10);
+    if(day>dateKey.format(new Date(Date.now()+28*dayMs)))break;
     const row=document.createElement('details'); row.dataset.day=day;row.open=open ? day===open : i===0;
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
@@ -78,7 +80,7 @@ async function choose(c){
   $('selectedCourse').textContent=c.title;
   step('dateStep');renderDays();
   $('dateStep').scrollIntoView({block:'start'});
-  $('availabilityNote').textContent=pagesPreview?'Preview times · Reservations open on the live studio site.':'Checking studio availability…';
+  $('availabilityNote').textContent=pagesPreview?'Choose a time to try the booking demo.':'Checking studio availability…';
   if(pagesPreview)return;
   try{
     const courses=catalog.length?catalog:await loadCourses();
@@ -93,10 +95,21 @@ async function choose(c){
   }catch{if(token===selection)$('availabilityNote').textContent='Preview times · Live availability could not be verified.';}
 }
 $('duration').onchange=renderDays;$('minutes').oninput=renderDays;
-$('prev').onclick=()=>{week=Math.max(0,week-1);renderDays();};$('next').onclick=()=>{week++;renderDays();};
+$('next').onclick=()=>{const added=$('days').children.length;week=Math.min(3,week+1);renderDays();$('days').children[added]?.querySelector('summary')?.focus();};
 $('backButton').onclick=()=>{step('dateStep');renderDays();};
 $('bookingForm').onsubmit=async e=>{
-  e.preventDefault();if(!live)return;$('submitBooking').disabled=true;
+  e.preventDefault();if(pagesPreview){
+    $('resultTitle').textContent='Sample payment';
+    $('confirmationText').textContent=$('bookingSummary').textContent;
+    $('confirmationCode').textContent='Demo checkout · No reservation or charge.';
+    const link=node('a','Open sample link (YouTube) ↗','hero-link');
+    link.href='https://www.youtube.com/';link.target='_blank';link.rel='noopener noreferrer';
+    const qr=new Image(168,168);qr.src='./sample-checkout.svg';qr.alt='QR code for the sample YouTube link';
+    $('payment').replaceChildren(qr,link);
+    e.target.reset();step('successStep');$('successStep').scrollIntoView({block:'start'});return;
+  }
+  if(!live)return;
+  $('submitBooking').disabled=true;
   try{
     const data=await api('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),course_id:course.id,starts_at:selected,minutes:minutes()})});
     $('confirmationText').textContent=$('bookingSummary').textContent+' · '+data.instructions;
@@ -137,9 +150,10 @@ $('courseList').addEventListener('click',event=>{
     duration_minutes:Number(card.dataset.minutes),price_cents:Number(card.dataset.cents)});
 });
 if(!pagesPreview)loadCourses().catch(()=>{});
-api('/api/config').then(cfg=>{
+if(!pagesPreview)api('/api/config').then(cfg=>{
   const digits=(cfg.whatsapp || '').replace(/\D/g,'');
   if(/^\d{8,15}$/.test(digits)){
     const a=$('whatsapp');a.href='https://wa.me/'+digits;a.textContent='Questions? WhatsApp +'+digits;a.hidden=false;
   }
 }).catch(()=>{}); // Optional contact settings load independently of the classes.
+

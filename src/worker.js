@@ -19,7 +19,10 @@ function adminOK(request, env) {
   const auth = request.headers.get('authorization') || '';
   if (!auth.startsWith('Basic ')) return false;
   try {
-    const [user, pass] = atob(auth.slice(6)).split(':');
+    const decoded = atob(auth.slice(6));
+    const split = decoded.indexOf(':');
+    if(split < 1)return false;
+    const user=decoded.slice(0,split), pass=decoded.slice(split+1);
     return !!env.ADMIN_USERNAME && !!env.ADMIN_PASSWORD && user === env.ADMIN_USERNAME && pass === env.ADMIN_PASSWORD;
   } catch { return false; }
 }
@@ -32,11 +35,27 @@ function sameOrigin(request) {
 }
 async function parseJSON(request) {
   if (Number(request.headers.get('content-length') || 0) > 8192) throw new Error('Payload too large.');
-  const value = await request.text();
-  if (value.length > 8192) throw new Error('Payload too large.');
-  return JSON.parse(value);
+  if (!request.body) throw new SyntaxError('Expected a JSON body.');
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0, value = '';
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > 8192) {
+        await reader.cancel();
+        throw new Error('Payload too large.');
+      }
+      value += decoder.decode(chunk.value, {stream:true});
+    }
+  } finally { reader.releaseLock(); }
+  const data=JSON.parse(value + decoder.decode());
+  if(!data || typeof data!=='object' || Array.isArray(data))throw new SyntaxError('Expected an object.');
+  return data;
 }
-function validISO(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value)); }
+function validISO(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString()===value; }
 
 async function notify(env, booking) {
   if (!env.NOTIFY_WEBHOOK_URL || !env.NOTIFY_SHARED_SECRET) return;
@@ -106,8 +125,8 @@ export default {
         if (!first || !last || !email || !/^[+\d(). -]+$/.test(phone) || phone.replace(/\D/g,'').length < 7 || d.website)
           return INVALID('Enter your name, email and phone number.');
         const duration = d.minutes, start = d.starts_at;
-        if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+48*3600000 ||
-            !Number.isInteger(duration) || duration < 15 || duration > 360) return INVALID('Choose a time at least 48 hours ahead and a duration of 15–360 minutes.');
+        if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+48*3600000 || Date.parse(start)>Date.now()+28*86400000 ||
+            !Number.isInteger(duration) || duration < 15 || duration > 360) return INVALID('Choose a time between 48 hours and four weeks ahead and a duration of 15–360 minutes.');
         const clock = new Intl.DateTimeFormat('en-GB',{timeZone:env.STUDIO_TIMEZONE,hour:'2-digit',minute:'2-digit'}).format(new Date(start));
         if (clock < '07:00' || clock > '19:00') return INVALID('Choose an Austin start time between 07:00 and 19:00.');
         const course = await env.DB.prepare('SELECT * FROM courses WHERE id=? AND active=1').bind(Number(d.course_id)||0).first();
@@ -226,4 +245,5 @@ export default {
     }
   }
 };
+
 
