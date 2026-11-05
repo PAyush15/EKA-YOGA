@@ -39,3 +39,11 @@ CREATE TABLE IF NOT EXISTS bookings (
 CREATE INDEX IF NOT EXISTS idx_bookings_session_status ON bookings (session_id, status);
 CREATE UNIQUE INDEX IF NOT EXISTS unique_active_email_per_session
   ON bookings (session_id, lower(email)) WHERE status = 'confirmed';
+
+
+CREATE TABLE IF NOT EXISTS payments (booking_id TEXT PRIMARY KEY REFERENCES bookings(id), paid_at TEXT NOT NULL);
+INSERT INTO courses (title,description,duration_minutes,capacity,price_cents,currency) SELECT 'Private yoga (1 : 1)','Personalized class according to your medical condition, chronic pain or other health concern with suitable poses and modifications to support your comfort and abilities.',60,1,8000,'USD' WHERE NOT EXISTS (SELECT 1 FROM courses WHERE title='Private yoga (1 : 1)');
+INSERT INTO courses (title,description,duration_minutes,capacity,price_cents,currency) SELECT 'Small Group Yoga','Practice yoga together while receiving the personal attention you deserve. I’ll guide you with modifications to suit each person’s needs and goals. (Maximum 5 people)',70,5,5000,'USD' WHERE NOT EXISTS (SELECT 1 FROM courses WHERE title='Small Group Yoga');
+INSERT INTO courses (title,description,duration_minutes,capacity,price_cents,currency) SELECT 'Foundation Class','In this class, Each pose will explain and demonstrated in detail, with a focus on proper alignment, breathing techniques, and step-by-step guidance. so you can get much benefits and avoid mistakes. (Everyone is welcome)',60,1,10000,'USD' WHERE NOT EXISTS (SELECT 1 FROM courses WHERE title='Foundation Class');
+INSERT INTO courses (title,description,duration_minutes,capacity,price_cents,currency) SELECT 'Group Yoga Session','Exercises for all over body. Bring your mat, Room temperature water bottle, Towel, Comfy cloths and most importantly, Bring yourself. (10 people Max)',70,10,8500,'USD' WHERE NOT EXISTS (SELECT 1 FROM courses WHERE title='Group Yoga Session');
+INSERT INTO courses (title,description,duration_minutes,capacity,price_cents,currency) SELECT 'Office Workers session','Designed especially for office workers, these sessions focus on desk-related stiffness, neck and shoulder tension, posture, and stress relief. (4 people max)',60,4,5000,'USD' WHERE NOT EXISTS (SELECT 1 FROM courses WHERE title='Office Workers session');

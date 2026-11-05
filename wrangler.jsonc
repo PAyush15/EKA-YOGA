@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "yoga-booking-starter",
+  "name": "yoga-by-krunali",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-31",
   "assets": {
@@ -12,11 +12,14 @@
     {
       "binding": "DB",
       "database_name": "yoga-bookings",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "af02d4ef-e4af-4f1d-8864-6d7f2508e841"
     }
   ],
   "vars": {
-    "STUDIO_TIMEZONE": "Europe/Berlin",
-    "STUDIO_NAME": "Soma Yoga Studio"
+    "STUDIO_TIMEZONE": "America/Chicago",
+    "STUDIO_NAME": "Yoga by Krunali",
+    "WHATSAPP_NUMBER": "",
+    "PAYMENT_URL": "",
+    "PAYMENT_QR_PATH": ""
   }
 }

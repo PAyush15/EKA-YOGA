@@ -1,132 +1,100 @@
 'use strict';
-const el = id => document.getElementById(id);
-const state = { courses: [], sessions: [], course: null, day: null, session: null, demo: false,
-  timezone: 'Europe/Berlin', studioName: 'Soma Yoga Studio', month: null };
-const now = new Date();
-el('year').textContent = now.getFullYear();
-const timeText = iso => new Intl.DateTimeFormat('en-GB', {timeZone: state.timezone, hour: '2-digit', minute: '2-digit', hour12: false}).format(new Date(iso));
-const dateText = iso => new Intl.DateTimeFormat('en-GB', {timeZone: state.timezone, weekday:'long', day:'numeric',month:'long',year:'numeric'}).format(new Date(iso));
-const dateParts = iso => Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: state.timezone, year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(new Date(iso)).filter(p => p.type !== 'literal').map(p => [p.type,p.value]));
-const dayKey = iso => { const p = dateParts(iso); return `${p.year}-${p.month}-${p.day}`; };
-const formatPrice = course => !course.price_cents ? 'Free' : new Intl.NumberFormat('en', {style:'currency',currency:course.currency || 'EUR',maximumFractionDigits:2}).format(course.price_cents/100);
-function demoData() {
-  state.demo = true;
-  state.courses = [
-    {id:1,title:'Morning Hatha Flow',description:'Mindful movement, breathwork and grounded poses. All levels welcome.',category:'Gentle',duration_minutes:70,capacity:10,price_cents:1500,currency:'EUR'},
-    {id:2,title:'Vinyasa & Energy',description:'A dynamic, energizing flow that builds strength and focus.',category:'Dynamic',duration_minutes:60,capacity:12,price_cents:1800,currency:'EUR'},
-    {id:3,title:'Yin & Deep Rest',description:'Slow restorative stretches, quiet breathing and complete release.',category:'Restorative',duration_minutes:75,capacity:8,price_cents:1400,currency:'EUR'}
-  ];
-  state.sessions = [];
-  for(let offset=1;offset<44;offset++){
-    const d = new Date(Date.now() + offset*86400000);
-    const w=d.getDay(); const id=w===2?1:w===4?2:w===6?3:null;
-    if(!id)continue;
-    d.setHours(id===1?9:id===2?18:10,0,0,0);
-    state.sessions.push({id:offset,course_id:id,starts_at:d.toISOString(),remaining:id===3?5:9});
-  }
-  showNotice('Preview mode — the design works, but reservations require a deployed database and API.');
+const $ = id => document.getElementById(id);
+const zone = 'America/Chicago', dayMs = 86400000;
+const dateKey = new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'});
+const dayLabel = new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'long',month:'short',day:'numeric',year:'numeric'});
+const clock = new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
+let course, selected, intervals=[], week=0;
+function node(tag,text,cls){
+  const n=document.createElement(tag); n.textContent=text;
+  if(cls)n.className=cls;
+  return n;
 }
-function showNotice(message) {el('notice').textContent=message;el('notice').hidden=false;}
-function renderCourses(){
-  el('courseList').innerHTML='';
-  if(!state.courses.length){el('courseList').textContent='No classes published yet.';return;}
-  for(const c of state.courses){
-    const button=document.createElement('button');button.className='course-card'+(state.course?.id===c.id?' active':'');button.type='button';
-    const category=document.createElement('span');category.className='category';category.textContent=c.category;
-    const title=document.createElement('strong');title.textContent=c.title;
-    const desc=document.createElement('p');desc.textContent=c.description;
-    const meta=document.createElement('div');meta.className='course-tags';
-    for(const v of [`${c.duration_minutes} min`,`${c.capacity} spots`,formatPrice(c)]){const tag=document.createElement('span');tag.textContent=v;meta.append(tag);}
-    button.append(category,title,desc,meta);button.addEventListener('click',()=>selectCourse(c.id));el('courseList').append(button);
-  }
+function button(text,click,cls='slot'){
+  const b=node('button',text,cls); b.type='button'; b.onclick=click; return b;
 }
-function selectCourse(id){
-  state.course=state.courses.find(c=>c.id===id);state.day=null;state.session=null;
-  const today=dayKey(new Date().toISOString());state.month=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7))-1,1));
-  el('choosePrompt').hidden=true;el('dateStep').hidden=false;el('detailsStep').hidden=true;el('successStep').hidden=true;
-  el('selectedCourse').innerHTML='';
-  const name=document.createElement('strong');name.textContent=state.course.title;
-  const meta=document.createElement('small');meta.textContent=`${state.course.duration_minutes} minutes · ${formatPrice(state.course)} · Up to ${state.course.capacity} students`;
-  el('selectedCourse').append(name,meta);
-  renderCourses();renderCalendar();renderTimes();setProgress(2);document.querySelector('.booking-panel').scrollIntoView({behavior:'smooth',block:'nearest'});
+async function api(path,options){
+  const response=await fetch(path,options);
+  const data=await response.json();
+  if(!response.ok)throw Error(data.error || 'Please try again.');
+  return data;
 }
-function setProgress(step){ for(let i=1;i<=3;i++){el('p'+i).className='progress-step'+(step===i?' active':step>i?' done':'');} }
-function availableSessions(day){return state.sessions.filter(s=>s.course_id===state.course?.id && s.remaining>0 && dayKey(s.starts_at)===day && new Date(s.starts_at)>new Date());}
-function renderCalendar(){
-  const year=state.month.getUTCFullYear(), month=state.month.getUTCMonth();
-  const monthStr=new Intl.DateTimeFormat('en-GB',{month:'long',year:'numeric',timeZone:'UTC'}).format(state.month);
-  el('monthLabel').textContent=monthStr;
-  const todayKey=dayKey(new Date().toISOString());
-  const currentMonth=new Date(Date.UTC(Number(todayKey.slice(0,4)),Number(todayKey.slice(5,7))-1,1));
-  el('prevMonth').disabled=state.month<=currentMonth;
-  el('nextMonth').disabled=state.month>=new Date(Date.UTC(currentMonth.getUTCFullYear(),currentMonth.getUTCMonth()+2,1));
-  const cal=el('calendar');cal.innerHTML='';
-  for(const d of ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']){const h=document.createElement('span');h.className='dow';h.textContent=d;cal.append(h);}
-  const offset=(new Date(Date.UTC(year,month,1)).getUTCDay()+6)%7;
-  for(let j=0;j<offset;j++)cal.append(document.createElement('span'));
-  const count=new Date(Date.UTC(year,month+1,0)).getUTCDate();
-  for(let date=1;date<=count;date++){
-    const key=`${year}-${String(month+1).padStart(2,'0')}-${String(date).padStart(2,'0')}`;
-    const n=availableSessions(key).length;
-    const b=document.createElement('button');b.type='button';b.className='cal-day'+(n?' is-available':'')+(state.day===key?' selected':'');
-    b.textContent=date;b.disabled=!n;b.setAttribute('aria-label',`${key}${n?' available':''}`);
-    if(n)b.addEventListener('click',()=>{state.day=key;state.session=null;renderCalendar();renderTimes();});
-    cal.append(b);
+function notice(msg){$('notice').textContent=msg;$('notice').hidden=!msg;}
+function step(id){
+  for(const s of ['choosePrompt','dateStep','detailsStep','successStep']) $(s).hidden=s!==id;
+  $('lengthBox').hidden=id!=='dateStep';
+  for(const [i,key] of ['p1','p2','p3'].entries()) $(key).classList.toggle('active',i<=({choosePrompt:0,dateStep:1,detailsStep:2,successStep:2}[id]));
+}
+function minutes(){return Number($('duration').value==='custom'?$('minutes').value:$('duration').value);}
+function startFor(day,time){
+  // Austin changes offset before 07:00. UTC noon is on the same day's daytime offset.
+  const offset=12-Number(clock.format(new Date(day+'T12:00:00Z')).slice(0,2));
+  return Date.parse(day+'T'+time+':00Z')+offset*3600000;
+}
+function available(start){
+  const length=minutes();
+  return Number.isInteger(length)&&length>=15&&length<=360&&start>=Date.now()+2*dayMs &&
+    !intervals.some(i=>start<i.end && start+length*60000>i.start);
+}
+function pick(day,time){
+  const start=startFor(day,time);
+  if(!available(start)){notice('Choose an available time and a duration of 15–360 minutes.');return;}
+  selected=new Date(start).toISOString();
+  $('bookingSummary').textContent=course.title+' · '+day+' · '+time+' Austin time · '+minutes()+' min · '+$('rateNote').textContent;
+  $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').elements.first_name.focus();
+}
+function renderDays(){
+  const open=$('days').querySelector('details[open]')?.dataset.day;
+  $('days').replaceChildren();$('prev').disabled=week===0;
+  $('customBox').hidden=$('duration').value!=='custom';
+  $('rateNote').textContent=minutes()===course.duration_minutes?'$'+(course.price_cents/100).toFixed(2):'Studio will confirm the price for this duration.';
+  const first=Date.parse(dateKey.format(new Date(Date.now()+2*dayMs))+'T12:00:00Z');
+  for(let i=0;i<7;i++){
+    const date=new Date(first+(week*7+i)*dayMs), day=date.toISOString().slice(0,10);
+    const row=document.createElement('details'); row.dataset.day=day;row.open=day===open;
+    row.append(node('summary',dayLabel.format(date)));
+    const slots=node('div','','slots');
+    for(let hour=7;hour<=19;hour++){
+      const time=String(hour).padStart(2,'0')+':00';
+      const b=button(time,()=>pick(day,time));b.disabled=!available(startFor(day,time));slots.append(b);
+    }
+    const custom=node('div','','custom-time');custom.hidden=true;
+    const input=document.createElement('input');input.type='time';input.min='07:00';input.max='19:00';input.value='07:30';input.setAttribute('aria-label','Custom Austin start time');
+    custom.append(input,button('Use time',()=>{if(input.value && input.reportValidity())pick(day,input.value);}));
+    row.append(slots,button('Custom start time',()=>{custom.hidden=!custom.hidden;},'back-link'),custom);$('days').append(row);
   }
 }
-function renderTimes(){
-  el('timezoneLabel').textContent=state.timezone.replace('_',' ');
-  const target=el('timeList');target.innerHTML='';
-  if(!state.day){const m=document.createElement('span');m.className='muted';m.textContent='Select a highlighted date to see times.';target.append(m);return;}
-  const times=availableSessions(state.day).sort((a,b)=>a.starts_at.localeCompare(b.starts_at));
-  if(!times.length){target.textContent='No remaining times. Select a different day.';return;}
-  times.forEach(s=>{
-    const b=document.createElement('button');b.className='time-slot';b.type='button';
-    b.textContent=timeText(s.starts_at);const small=document.createElement('small');small.textContent=`${s.remaining} spot${s.remaining!==1?'s':''} left`;
-    b.append(small);b.addEventListener('click',()=>selectSession(s));target.append(b);
-  });
+async function refresh(){intervals=(await api('/api/busy')).intervals.map(x=>({start:Date.parse(x.starts_at),end:Date.parse(x.ends_at)}));}
+async function choose(c){
+  try{await refresh();course=c;week=0;notice('');$('duration').replaceChildren();
+    for(const m of new Set([c.duration_minutes,60,90,120,'custom'])){
+      $('duration').add(new Option(({60:'1 hour',90:'1.5 hours',120:'2 hours',custom:'Custom duration'})[m]||m+' minutes',m));
+    }
+    $('selectedCourse').textContent=c.title;step('dateStep');renderDays();$('dateStep').scrollIntoView({block:'nearest'});
+  }catch(e){notice(e.message);}
 }
-function selectSession(session){
-  state.session=session;setProgress(3);el('dateStep').hidden=true;el('detailsStep').hidden=false;
-  el('bookingSummary').innerHTML='';const strong=document.createElement('strong');strong.textContent=state.course.title;
-  const p=document.createElement('p');p.textContent=`${dateText(session.starts_at)} at ${timeText(session.starts_at)} · ${state.course.duration_minutes} min · ${formatPrice(state.course)}`;
-  el('bookingSummary').append(strong,p);el('formError').hidden=true;
-  el('bookingForm').reset();
-}
-el('backButton').addEventListener('click',()=>{el('detailsStep').hidden=true;el('dateStep').hidden=false;setProgress(2);});
-el('prevMonth').addEventListener('click',()=>{state.month=new Date(Date.UTC(state.month.getUTCFullYear(),state.month.getUTCMonth()-1,1));renderCalendar();});
-el('nextMonth').addEventListener('click',()=>{state.month=new Date(Date.UTC(state.month.getUTCFullYear(),state.month.getUTCMonth()+1,1));renderCalendar();});
-el('bookAnother').addEventListener('click',()=>selectCourse(state.course.id));
-el('bookingForm').addEventListener('submit',async event=>{
-  event.preventDefault();const error=el('formError');error.hidden=true;
-  if(state.demo){error.textContent='Preview mode does not save reservations. Deploy the backend first.';error.hidden=false;return;}
-  const button=el('submitBooking');button.disabled=true;button.firstChild.textContent='Confirming… ';
-  const data=Object.fromEntries(new FormData(event.currentTarget).entries());data.session_id=state.session.id;
+$('duration').onchange=renderDays;$('minutes').oninput=renderDays;
+$('prev').onclick=()=>{week=Math.max(0,week-1);renderDays();};$('next').onclick=()=>{week++;renderDays();};
+$('backButton').onclick=()=>{step('dateStep');renderDays();};
+$('bookingForm').onsubmit=async e=>{
+  e.preventDefault();$('submitBooking').disabled=true;
   try{
-    const r=await fetch('/api/bookings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});
-    const body=await r.json();if(!r.ok)throw new Error(body.error || 'Booking failed.');
-    el('detailsStep').hidden=true;el('successStep').hidden=false;setProgress(3);
-    el('confirmationText').textContent=`Your place in ${body.course} on ${dateText(body.starts_at)} at ${timeText(body.starts_at)} is reserved. ${body.email} will receive an email if notifications are configured.`;
-    el('confirmationCode').textContent='Reference: '+body.id.slice(0,8).toUpperCase();
-    await loadSessions();
-  }catch(e){error.textContent=e.message;error.hidden=false;}
-  finally{button.disabled=false;button.firstChild.textContent='Confirm reservation ';}
-});
-async function loadSessions(){
-  const start=new Date(Date.now()-86400000).toISOString();const end=new Date(Date.now()+65*86400000).toISOString();
-  const r=await fetch(`/api/sessions?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
-  if(!r.ok)throw new Error('Cannot load class dates.');state.sessions=(await r.json()).sessions;
-  if(state.course) {renderCalendar();renderTimes();}
-}
+    const data=await api('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),course_id:course.id,starts_at:selected,minutes:minutes()})});
+    $('confirmationText').textContent=$('bookingSummary').textContent+' · '+data.instructions;
+    $('confirmationCode').textContent='Booking reference: '+data.id;$('payment').replaceChildren();
+    if(data.paymentUrl){const link=node('a','Pay for your session','hero-link');link.href=data.paymentUrl;$('payment').append(link);}
+    if(data.qr){const img=new Image(160,160);img.src=data.qr;img.alt='Scan to pay';$('payment').append(img);}
+    step('successStep');e.target.reset();
+  }catch(err){$('formError').textContent=err.message;$('formError').hidden=false;try{await refresh();}catch{}}
+  finally{$('submitBooking').disabled=false;}
+};
+$('bookAnother').onclick=()=>{step('choosePrompt');$('courseList').scrollIntoView();};
+$('year').textContent=new Date().getFullYear();
 (async()=>{
-  try{
-    const [c,s]=await Promise.all([fetch('/api/config'),fetch('/api/courses')]);
-    if(!c.ok||!s.ok)throw new Error('API unavailable.');
-    const config=await c.json();state.studioName=config.studioName||state.studioName;state.timezone=config.timezone||state.timezone;
-    state.courses=(await s.json()).courses;await loadSessions();
-  }catch(e){demoData();}
-  document.title=`Book a Class • ${state.studioName}`;
-  el('footerStudio').textContent=state.studioName;
-  el('brandName').textContent=state.studioName.split(' ')[0].toLowerCase();
-  renderCourses();
-})();
+  const [cfg,{courses}]=await Promise.all([api('/api/config'),api('/api/courses')]);
+  const digits=cfg.whatsapp.replace(/\D/g,'');
+  if(/^\d{8,15}$/.test(digits)){const a=$('whatsapp');a.href='https://wa.me/'+digits;a.textContent='Questions? WhatsApp +'+digits;a.hidden=false;}
+  $('courseList').replaceChildren();
+  for(const c of courses){const card=node('article','','course-card');card.append(node('strong',c.title),node('p',c.description),node('p',c.duration_minutes+' min · $'+(c.price_cents/100).toFixed(2)),button('Book',()=>choose(c),'back-link'));$('courseList').append(card);}
+  if(!courses.length)notice('Classes will be available soon.');
+})().catch(()=>notice('Booking is temporarily unavailable. Please try again later.'));
