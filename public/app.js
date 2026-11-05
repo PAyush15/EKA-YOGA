@@ -90,11 +90,45 @@ $('bookingForm').onsubmit=async e=>{
 };
 $('bookAnother').onclick=()=>{step('choosePrompt');$('courseList').scrollIntoView();};
 $('year').textContent=new Date().getFullYear();
-(async()=>{
-  const [cfg,{courses}]=await Promise.all([api('/api/config'),api('/api/courses')]);
-  const digits=cfg.whatsapp.replace(/\D/g,'');
-  if(/^\d{8,15}$/.test(digits)){const a=$('whatsapp');a.href='https://wa.me/'+digits;a.textContent='Questions? WhatsApp +'+digits;a.hidden=false;}
-  $('courseList').replaceChildren();
-  for(const c of courses){const card=node('article','','course-card');card.append(node('strong',c.title),node('p',c.description),node('p',c.duration_minutes+' min · $'+(c.price_cents/100).toFixed(2)),button('Book',()=>choose(c),'back-link'));$('courseList').append(card);}
-  if(!courses.length)notice('Classes will be available soon.');
-})().catch(()=>notice('Booking is temporarily unavailable. Please try again later.'));
+function renderCatalog(courses) {
+  const cards=courses.map(c=>{
+    const card=node('article','','course-card');
+    card.append(node('strong',c.title),node('p',c.description),
+      node('p',c.duration_minutes+' min · $'+(c.price_cents/100).toFixed(2)),
+      button('Book',()=>choose(c),'back-link'));
+    return card;
+  });
+  $('courseList').replaceChildren(...cards);
+  if(!cards.length) $('courseList').textContent='Classes will be available soon.';
+}
+
+async function loadCourses() {
+  const {courses}=await api('/api/courses',{signal:AbortSignal.timeout(8000)});
+  if(!Array.isArray(courses)) throw Error('Invalid catalog');
+  renderCatalog(courses);
+  return courses;
+}
+
+// The published catalog can be browsed even when only static files are served.
+// Resolve a live course ID before opening the calendar for a reservation.
+$('courseList').addEventListener('click',async event=>{
+  const target=event.target.closest('[data-practice]');
+  if(!target)return;
+  const title=target.dataset.practice;
+  target.disabled=true;
+  try{
+    const courses=await loadCourses();
+    const match=courses.find(c=>c.title===title);
+    if(match)await choose(match);
+  }catch{
+    $('choosePrompt').querySelector('h3').textContent=title;
+    $('choosePrompt').querySelector('p').textContent='Online reservations are currently offline.';
+  }finally{target.disabled=false;}
+});
+loadCourses().catch(()=>{}); // Keep the published cards when the live catalog cannot be reached.
+api('/api/config').then(cfg=>{
+  const digits=(cfg.whatsapp || '').replace(/\D/g,'');
+  if(/^\d{8,15}$/.test(digits)){
+    const a=$('whatsapp');a.href='https://wa.me/'+digits;a.textContent='Questions? WhatsApp +'+digits;a.hidden=false;
+  }
+}).catch(()=>{}); // Optional contact settings load independently of the classes.
