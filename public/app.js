@@ -27,6 +27,12 @@ function step(id){
   $('lengthBox').hidden=id!=='dateStep';
   for(const [i,key] of ['p1','p2','p3'].entries()) $(key).classList.toggle('active',i<=({choosePrompt:0,dateStep:1,detailsStep:2,successStep:2}[id]));
 }
+function sessionPrice(c){
+  const amount=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(c.price_cents/100);
+  if(c.title==='Small Group Yoga')return amount+' total for 1–5 people';
+  if(c.title==='Group Yoga Session')return amount+' total for 1–10 people';
+  return amount;
+}
 function minutes(){return Number($('duration').value==='custom'?$('minutes').value:$('duration').value);}
 function startFor(day,time){
   // Austin changes offset before 07:00. UTC noon is on the same day's daytime offset.
@@ -52,7 +58,7 @@ function renderDays(){
   const open=$('days').querySelector('details[open]')?.dataset.day;
   $('days').replaceChildren();$('next').hidden=week>=3;
   $('customBox').hidden=$('duration').value!=='custom';
-  $('rateNote').textContent=minutes()===course.duration_minutes?'$'+(course.price_cents/100).toFixed(2):'Studio will confirm the price for this duration.';
+  $('rateNote').textContent=minutes()===course.duration_minutes?sessionPrice(course):'Studio will confirm the price for this duration.';
   const first=Date.parse(dateKey.format(new Date(Date.now()+2*dayMs))+'T12:00:00Z');
   for(let i=0;i<7*(week+1);i++){
     const date=new Date(first+i*dayMs), day=date.toISOString().slice(0,10);
@@ -125,7 +131,7 @@ function renderCatalog(courses) {
   const cards=courses.map(c=>{
     const card=node('article','','course-card');
     card.append(node('strong',c.title),node('p',c.description),
-      node('p',c.duration_minutes+' min · $'+(c.price_cents/100).toFixed(2)),
+      node('p',c.duration_minutes+' min · '+sessionPrice(c)),
       node('button','Book class →','book-course'));
     card.dataset.id=c.id;card.dataset.minutes=c.duration_minutes;card.dataset.cents=c.price_cents;
     return card;
