@@ -26,7 +26,7 @@
   function setUser(user){
     window.customerAccount=user;
     el('signedIn').hidden=!user;el('signedOut').hidden=!!user;
-    el('accountLink').textContent=user?'My sessions':'Sign up / Log in';
+    el('accountLink').textContent=user?'My sessions':'Sign in / Sign up';
     el('accountIdentity').textContent=user?'Signed in as '+(user.name || user.email)+' · '+user.email:'';
     if(!user)el('mySessions').replaceChildren();
     window.prefillAccount();
@@ -79,17 +79,17 @@
     finally{opening=false;}
   }
   el('accountLink').onclick=async event=>{
-    event.preventDefault();el('account').hidden=false;el('account').scrollIntoView({block:'start'});el('account').focus({preventScroll:true});
+    event.preventDefault();if(!el('account').open)el('account').showModal();
     if(window.customerAccount)await sessions();else await signIn();
   };
-  el('closeAccount').onclick=()=>{el('account').hidden=true;el('accountLink').focus();};
+  el('closeAccount').onclick=()=>{el('account').close();};
   el('retrySignIn').onclick=signIn;el('refreshSessions').onclick=sessions;
   el('logout').onclick=async()=>{
     el('logout').disabled=true;
     try {await request('/api/auth/logout',{});setUser(null);el('bookingForm').reset();window.google?.accounts.id.disableAutoSelect();await signIn();}
     catch(error){message(error.message);}finally{el('logout').disabled=false;}
   };
-  window.addEventListener('booking-saved',()=>{if(!el('account').hidden)sessions();});
+  window.addEventListener('booking-saved',()=>{if(el('account').open)sessions();});
   setUser(null);
   if(!preview)request('/api/auth/me').then(data=>setUser(data.user)).catch(()=>{});
 })();

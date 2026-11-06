@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#f7f6f0" />
   <meta name="description" content="Explore yoga courses and reserve your next class online." />
   <title>Book a Class • Yoga by Krunali</title>
-  <link rel="stylesheet" href="./styles.css?v=20261106-accounts" />
-  <script defer src="./app.js?v=20261106-accounts"></script>
-  <script defer src="./account.js?v=20261106-accounts"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261106-dialog" />
+  <script defer src="./app.js?v=20261106-dialog"></script>
+  <script defer src="./account.js?v=20261106-dialog"></script>
 </head>
 <body>
   <div class="announcement">BREATHE DEEPLY. MOVE MINDFULLY. FEEL GOOD.</div>
@@ -17,7 +17,7 @@
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 45 45" fill="none"><path d="M22.5 36C7.7 29.8 11 16.8 22.5 8c11.5 8.8 14.8 21.8 0 28Z" stroke="currentColor" stroke-width="1.7"/><path d="M22.5 12v24M22.5 28c-7-8-13-8-15-7M22.5 28c7-8 13-8 15-7" stroke="currentColor" stroke-width="1.3"/></svg></span>
       <span><strong id="brandName">Yoga by Krunali</strong><small>AUSTIN, TEXAS</small></span>
     </a>
-    <nav><a href="#classes">Classes</a><a href="#about">How it works</a><a id="accountLink" href="#account">Sign up / Log in</a><a class="nav-admin" href="/admin">Studio login ↗</a></nav>
+    <nav><a href="#classes">Classes</a><a href="#about">How it works</a><button id="accountLink" class="nav-admin" type="button" aria-haspopup="dialog" aria-controls="account">Sign in / Sign up</button></nav>
   </header>
   <main>
     <section class="hero wrap">
@@ -77,12 +77,12 @@
         </div>
       </div>
     </section>
-    <section class="section wrap" id="account" tabindex="-1" hidden>
-      <div class="section-top"><div><div class="eyebrow olive">YOUR PRACTICE</div><h2>My sessions</h2></div><button id="closeAccount" class="back-link" type="button">Close ×</button></div>
+    <dialog class="account-dialog" id="account" aria-labelledby="accountTitle">
+      <div class="section-top"><div><div class="eyebrow olive">YOUR PRACTICE</div><h2 id="accountTitle">Your account</h2></div><button id="closeAccount" class="back-link" type="button">Close ×</button></div>
       <p id="accountMessage" role="status"></p>
       <div id="signedOut"><p>Create your account or log in with Google to keep your booked sessions in one place. No separate password needed.</p><div id="googleSignIn"></div><button type="button" id="retrySignIn" class="back-link" hidden>Try sign-in again</button></div>
       <div id="signedIn" hidden><p id="accountIdentity"></p><button type="button" class="back-link" id="refreshSessions">Refresh sessions</button><button type="button" class="back-link" id="logout">Log out</button><div id="mySessions" class="session-list"></div><p>Only bookings made while signed in appear here. For an earlier guest booking, contact your instructor with your booking reference.</p></div>
-    </section>
+    </dialog>
     <section class="footer-info" id="about"><div class="wrap footer-info-grid"><div><div class="eyebrow">A MORE MINDFUL ROUTINE</div><h2>Start where you are.<br><em>Grow from there.</em></h2></div><div><h3>What to expect</h3><p>Book a time that works for you. We’ll confirm your address before the visit. On the day, set out your mat, keep some water nearby, and leave enough room to stretch.</p></div></div></section>
   </main>
   <footer class="site-footer wrap"><span>© <span id="year"></span> <span id="footerStudio">Yoga by Krunali</span></span><span>Built for mindful moments. <a href="/admin">Admin ↗</a></span></footer>
