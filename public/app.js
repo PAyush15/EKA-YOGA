@@ -5,6 +5,38 @@ const dateKey = new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',mo
 const dayLabel = new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'long',month:'short',day:'numeric',year:'numeric'});
 const clock = new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
 let live=false, selection=0, catalog=[];
+let securityWidget, securityLoading, securityToken='';
+function resetSecurity(){
+  securityToken='';
+  if(securityWidget!==undefined && window.turnstile)window.turnstile.reset(securityWidget);
+}
+async function prepareSecurity(){
+  if(pagesPreview)return;
+  $('retrySecurity').hidden=true;
+  $('securityMessage').textContent='Loading security check…';
+  try {
+    if(!window.turnstile){
+      if(!securityLoading)securityLoading=new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.async=true;
+        const timer=setTimeout(()=>{script.remove();reject(Error());},15000);
+        script.onload=()=>{clearTimeout(timer);resolve();};
+        script.onerror=()=>{clearTimeout(timer);script.remove();reject(Error());};
+        document.head.append(script);
+      }).catch(e=>{securityLoading=null;throw e;});
+      await securityLoading;
+    }
+    if(securityWidget!==undefined){resetSecurity();return;}
+    securityWidget=window.turnstile.render('#bookingSecurity',{
+      sitekey:'0x4AAAAAAF2faBhtFauaoAiT',action:'booking',
+      callback:token=>{securityToken=token;$('securityMessage').textContent='Security check complete.';},
+      'expired-callback':()=>{securityToken='';$('securityMessage').textContent='Please complete the security check again.';},
+      'error-callback':()=>{securityToken='';$('securityMessage').textContent='Security check could not load. Please retry.';$('retrySecurity').hidden=false;}
+    });
+  }catch{$('securityMessage').textContent='Security check could not load. Please retry.';$('retrySecurity').hidden=false;}
+}
+$('retrySecurity').onclick=prepareSecurity;
 const pagesPreview=location.hostname.endsWith('.github.io') || location.protocol==='file:';
 let course, selected, chosenDay, chosenTime, intervals=[], week=0;
 function node(tag,text,cls){
@@ -57,7 +89,7 @@ $('continueTime').onclick=()=>{
   $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').hidden=false;
   $('previewDetails').hidden=live;
   $('submitBooking').textContent=pagesPreview?'Continue to sample payment →':'Confirm reservation →';
-  window.prefillAccount?.();
+  window.prefillAccount?.();prepareSecurity();
   $('bookingForm').elements.first_name.focus();
 };
 
@@ -124,16 +156,17 @@ $('bookingForm').onsubmit=async e=>{
     e.target.reset();step('successStep');$('successStep').scrollIntoView({block:'start'});return;
   }
   if(!live)return;
+  if(!securityToken){$('formError').textContent='Please complete the security check before booking.';$('formError').hidden=false;return;}
   $('submitBooking').disabled=true;
   try{
-    const data=await api('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),course_id:course.id,starts_at:selected,minutes:minutes(),account_required:!!window.customerAccount})});
+    const data=await api('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),'cf-turnstile-response':securityToken,course_id:course.id,starts_at:selected,minutes:minutes(),account_required:!!window.customerAccount})});
     $('confirmationText').textContent=$('bookingSummary').textContent+' · '+data.instructions;
     $('confirmationCode').textContent='Booking reference: '+data.id;$('payment').replaceChildren();
     if(data.paymentUrl){const link=node('a','Pay for your session','hero-link');link.href=data.paymentUrl;$('payment').append(link);}
     if(data.qr){const img=new Image(160,160);img.src=data.qr;img.alt='Scan to pay';$('payment').append(img);}
     step('successStep');e.target.reset();window.prefillAccount?.();window.dispatchEvent(new Event('booking-saved'));
   }catch(err){$('formError').textContent=err.message;$('formError').hidden=false;try{await refresh();}catch{}}
-  finally{$('submitBooking').disabled=false;}
+  finally{resetSecurity();$('submitBooking').disabled=false;}
 };
 $('bookAnother').onclick=()=>{step('choosePrompt');$('courseList').scrollIntoView();};
 $('year').textContent=new Date().getFullYear();

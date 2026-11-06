@@ -137,6 +137,21 @@ export default {
         if (clock < '07:00' || clock > '19:00') return INVALID('Choose an Austin start time between 07:00 and 19:00.');
         const course = await env.DB.prepare('SELECT * FROM courses WHERE id=? AND active=1').bind(Number(d.course_id)||0).first();
         if (!course) return INVALID('Class unavailable.');
+        // Verify before any reservation or notification is created. Fail closed.
+        if (!env.TURNSTILE_SECRET_KEY) return INVALID('Booking verification is not configured. Please contact the studio.',503);
+        const token=d['cf-turnstile-response'];
+        if(typeof token!=='string' || !token || token.length>2048) return INVALID('Please complete the security check.',403);
+        try {
+          const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{
+            method:'POST',headers:{'content-type':'application/json'},
+            body:JSON.stringify({secret:env.TURNSTILE_SECRET_KEY,response:token}),
+            signal:AbortSignal.timeout(8000)
+          });
+          if(!response.ok) return INVALID('Security check unavailable. Please try again.',503);
+          const result=await response.json();
+          if(result.success!==true || result.hostname!==url.hostname || result.action!=='booking')
+            return INVALID('Security check expired or failed. Please try again.',403);
+        } catch { return INVALID('Security check unavailable. Please try again.',503); }
         const end = new Date(Date.parse(start)+duration*60000).toISOString();
         const id = crypto.randomUUID();
         // D1 executes the batch as one transaction. An existing active interval

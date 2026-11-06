@@ -14,6 +14,10 @@ class Statement{
   async run(){const o=this.st.run(...this.params);return {meta:{changes:o.changes,last_row_id:Number(o.lastInsertRowid)}};}
 }
 const env={DB:{prepare:s=>new Statement(s),batch:async statements=>{sqlite.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());sqlite.exec('COMMIT');return results;}catch(e){sqlite.exec('ROLLBACK');throw e;}}},ASSETS:{fetch:async()=>new Response('<h1>Static</h1>')},ADMIN_USERNAME:'admin',ADMIN_PASSWORD:'test-password',STUDIO_TIMEZONE:'America/Chicago',STUDIO_NAME:'Studio Test'};
+env.TURNSTILE_SECRET_KEY='test-secret';
+let verification={success:true,hostname:'test.example',action:'booking'};
+const originalFetch=globalThis.fetch;
+globalThis.fetch=async()=>Response.json(verification);
 const ctx={waitUntil:p=>p.catch(console.error)};
 async function req(path,method='GET',data=null,auth=false){
   const headers={};if(data)headers['content-type']='application/json';
@@ -25,10 +29,25 @@ const courses=(await (await req('/api/courses')).json()).courses;
 assert.deepEqual(courses.map(c=>[c.duration_minutes,c.price_cents]),[[60,8000],[70,5000],[60,10000],[70,8500],[60,5000]]);
 const day=new Date(Date.now()+4*86400000).toISOString().slice(0,10);
 const at=t=>day+'T'+t+':00.000Z';
-const book=(course_id,t,minutes,extra={})=>req('/api/bookings','POST',{first_name:'Austin',last_name:'Guest',phone:'+1 512 555 0123',email:'guest@example.org',course_id,starts_at:at(t),minutes,...extra});
+const book=(course_id,t,minutes,extra={})=>req('/api/bookings','POST',{'cf-turnstile-response':'test-token',first_name:'Austin',last_name:'Guest',phone:'+1 512 555 0123',email:'guest@example.org',course_id,starts_at:at(t),minutes,...extra});
 assert.equal((await book(1,'17:00',60,{starts_at:new Date(Date.now()+3600000).toISOString()})).status,400);
 assert.equal((await book(1,'17:00',60,{phone:''})).status,400);
 assert.equal((await book(1,'09:00',60)).status,400);
+const before=sqlite.prepare('SELECT count(*) n FROM bookings').get().n;
+assert.equal((await book(1,'17:00',60,{'cf-turnstile-response':''})).status,403);
+for(const result of [{success:false},{success:true,hostname:'evil.example',action:'booking'},{success:true,hostname:'test.example',action:'login'}]){
+ verification=result;assert.equal((await book(1,'17:00',60)).status,403);
+}
+verification={success:true,hostname:'test.example',action:'booking'};
+delete env.TURNSTILE_SECRET_KEY;
+assert.equal((await book(1,'17:00',60)).status,503);
+env.TURNSTILE_SECRET_KEY='test-secret';
+const verifyFetch=globalThis.fetch;
+globalThis.fetch=async()=>{throw Error('network failure');};
+assert.equal((await book(1,'17:00',60)).status,503);
+globalThis.fetch=verifyFetch;
+assert.equal(sqlite.prepare('SELECT count(*) n FROM bookings').get().n,before);
+console.log('PASS: Turnstile missing token/secret, invalid token, hostname/action mismatch and network failure block reservations.');
 const first=await book(2,'17:15',70);
 assert.equal(first.status,201);const id=(await first.json()).id;
 assert.equal((await book(1,'17:00',60)).status,409);
@@ -61,7 +80,8 @@ const {hash}=await import('../src/auth.js');
 const pair=await crypto.subtle.generateKey({name:'RSASSA-PKCS1-v1_5',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['sign','verify']);
 const jwk=await crypto.subtle.exportKey('jwk',pair.publicKey);jwk.kid='test-key';jwk.use='sig';
 const savedFetch=globalThis.fetch;
-globalThis.fetch=async url=>{
+globalThis.fetch=async (url,options)=>{
+  if(String(url).includes('/turnstile/'))return savedFetch(url,options);
   assert.equal(String(url),'https://www.googleapis.com/oauth2/v3/certs');
   return Response.json({keys:[jwk]});
 };
@@ -93,7 +113,7 @@ const sessionCookie=login.headers.getSetCookie().find(c=>c.startsWith('__Host-yo
 assert.equal((await customerReq('/api/auth/google','POST',{credential:valid},nonceCookie)).status,401,'nonce cannot be reused');
 assert.equal((await (await customerReq('/api/auth/me','GET',null,sessionCookie)).json()).user.email,'account@gmail.com');
 assert.equal((await (await customerReq('/api/me/bookings','GET',null,sessionCookie)).json()).bookings.length,0,'guest bookings remain private');
-const payload={first_name:'Account',last_name:'User',phone:'+1 512 555 0123',email:'different@example.com',course_id:1,starts_at:at('21:00'),minutes:60,account_required:true};
+const payload={'cf-turnstile-response':'test-token',first_name:'Account',last_name:'User',phone:'+1 512 555 0123',email:'different@example.com',course_id:1,starts_at:at('21:00'),minutes:60,account_required:true};
 assert.equal((await customerReq('/api/bookings','POST',payload)).status,401,'expired sign-in must not silently become guest');
 const reserved=await customerReq('/api/bookings','POST',payload,sessionCookie);
 assert.equal(reserved.status,201);
@@ -115,3 +135,5 @@ sqlite.prepare('UPDATE customer_sessions SET expires_at=1 WHERE customer_id=?').
 assert.equal((await customerReq('/api/me/bookings','GET',null,'__Host-yoga_session='+otherToken)).status,401);
 globalThis.fetch=savedFetch;
 console.log('PASS: signed Google tokens, claim/signature rejection, CSRF, nonce replay, secure cookies, booking ownership, account isolation, payment/cancellation status, logout and expiration.');
+
+globalThis.fetch=originalFetch;

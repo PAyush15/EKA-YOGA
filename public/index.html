@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#f7f6f0" />
   <meta name="description" content="Explore yoga courses and reserve your next class online." />
   <title>Book a Class • Yoga by Krunali</title>
-  <link rel="stylesheet" href="./styles.css?v=20261106-dialog" />
-  <script defer src="./app.js?v=20261106-dialog"></script>
-  <script defer src="./account.js?v=20261106-dialog"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261106-turnstile" />
+  <script defer src="./app.js?v=20261106-turnstile"></script>
+  <script defer src="./account.js?v=20261106-turnstile"></script>
 </head>
 <body>
   <div class="announcement">BREATHE DEEPLY. MOVE MINDFULLY. FEEL GOOD.</div>
@@ -70,7 +70,7 @@
               <p class="privacy">We use your information only to manage your booking and send related messages.</p>
               <div id="formError" role="alert" class="form-error" hidden></div>
               <button id="submitBooking" type="submit" class="primary-btn">Confirm reservation <span>→</span></button>
-              <p class="payment-note">Payment follows your reservation.</p>
+              <div id="bookingSecurity"></div><p id="securityMessage" role="status"></p><button id="retrySecurity" type="button" class="back-link" hidden>Retry security check</button><p class="payment-note">Payment follows your reservation.</p>
             </form>
           </div>
           <div id="successStep" class="success-step" hidden><div class="success-icon">✓</div><h2 id="resultTitle">Reserved · Payment pending</h2><p id="confirmationText"></p><div id="confirmationCode" class="confirmation-code"></div><div id="payment"></div><button id="bookAnother" class="primary-btn">Book another class <span>→</span></button></div>
