@@ -54,3 +54,64 @@ for (const [body,status] of [['null',400],['['+' '.repeat(9000)+']',413]]) {
   assert.equal(r.status,status);
 }
 console.log('PASS: malformed and oversized booking bodies rejected.');
+
+
+// Real RSA signatures exercise server verification; no Google network/account needed.
+const {hash}=await import('../src/auth.js');
+const pair=await crypto.subtle.generateKey({name:'RSASSA-PKCS1-v1_5',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['sign','verify']);
+const jwk=await crypto.subtle.exportKey('jwk',pair.publicKey);jwk.kid='test-key';jwk.use='sig';
+const savedFetch=globalThis.fetch;
+globalThis.fetch=async url=>{
+  assert.equal(String(url),'https://www.googleapis.com/oauth2/v3/certs');
+  return Response.json({keys:[jwk]});
+};
+env.GOOGLE_CLIENT_ID='test-client.apps.googleusercontent.com';
+async function customerReq(path,method='GET',data=null,cookie='',origin='https://test.example') {
+  return worker.fetch(new Request('https://test.example'+path,{method,headers:{cookie,origin,'content-type':'application/json'},...(data!==null?{body:JSON.stringify(data)}:{})}),env,ctx);
+}
+const b64=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
+async function credential(nonce,overrides={}){
+  const unsigned=b64({alg:'RS256',kid:'test-key'})+'.'+b64({sub:'google-user-1',email:'account@gmail.com',email_verified:true,name:'Account User',aud:env.GOOGLE_CLIENT_ID,iss:'https://accounts.google.com',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+3600,nonce,...overrides});
+  const signature=await crypto.subtle.sign('RSASSA-PKCS1-v1_5',pair.privateKey,new TextEncoder().encode(unsigned));
+  return unsigned+'.'+Buffer.from(signature).toString('base64url');
+}
+assert.equal((await customerReq('/api/me/bookings')).status,401);
+assert.equal((await customerReq('/api/auth/nonce','POST',{},'','https://evil.example')).status,403);
+const nonceResponse=await customerReq('/api/auth/nonce','POST',{});
+const nonce=(await nonceResponse.json()).nonce;
+const nonceCookie=nonceResponse.headers.get('set-cookie').split(';')[0];
+assert.match(nonceResponse.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Lax/);
+for(const override of [{aud:'evil-client'},{exp:1},{nonce:'wrong'},{email_verified:false},{iss:'https://evil.example'}]){
+  assert.equal((await customerReq('/api/auth/google','POST',{credential:await credential(nonce,override)},nonceCookie)).status,401);
+}
+const valid=await credential(nonce);
+const tampered=valid.split('.');tampered[1]=b64({email:'stolen@example.com'});
+assert.equal((await customerReq('/api/auth/google','POST',{credential:tampered.join('.')},nonceCookie)).status,401);
+const login=await customerReq('/api/auth/google','POST',{credential:valid},nonceCookie);
+assert.equal(login.status,200);
+const sessionCookie=login.headers.getSetCookie().find(c=>c.startsWith('__Host-yoga_session=')).split(';')[0];
+assert.equal((await customerReq('/api/auth/google','POST',{credential:valid},nonceCookie)).status,401,'nonce cannot be reused');
+assert.equal((await (await customerReq('/api/auth/me','GET',null,sessionCookie)).json()).user.email,'account@gmail.com');
+assert.equal((await (await customerReq('/api/me/bookings','GET',null,sessionCookie)).json()).bookings.length,0,'guest bookings remain private');
+const payload={first_name:'Account',last_name:'User',phone:'+1 512 555 0123',email:'different@example.com',course_id:1,starts_at:at('21:00'),minutes:60,account_required:true};
+assert.equal((await customerReq('/api/bookings','POST',payload)).status,401,'expired sign-in must not silently become guest');
+const reserved=await customerReq('/api/bookings','POST',payload,sessionCookie);
+assert.equal(reserved.status,201);
+const bookingId=(await reserved.json()).id;
+assert.equal(sqlite.prepare('SELECT email FROM bookings WHERE id=?').get(bookingId).email,'account@gmail.com');
+let mine=(await (await customerReq('/api/me/bookings','GET',null,sessionCookie)).json()).bookings;
+assert.equal(mine.length,1);assert.equal(mine[0].id,bookingId);assert.equal(mine[0].paid_at,null);
+sqlite.prepare('INSERT INTO customers(id,email,name) VALUES(?,?,?)').run('other','account@gmail.com','Other User');
+const otherToken='a'.repeat(64);
+sqlite.prepare('INSERT INTO customer_sessions(token_hash,customer_id,expires_at) VALUES(?,?,?)').run(await hash(otherToken),'other',Math.floor(Date.now()/1000)+3600);
+assert.equal((await (await customerReq('/api/me/bookings','GET',null,'__Host-yoga_session='+otherToken)).json()).bookings.length,0,'same email does not grant another account access');
+sqlite.prepare('INSERT INTO payments(booking_id,paid_at) VALUES(?,?)').run(bookingId,new Date().toISOString());
+mine=(await (await customerReq('/api/me/bookings','GET',null,sessionCookie)).json()).bookings;assert.ok(mine[0].paid_at);
+sqlite.prepare("UPDATE bookings SET status='cancelled' WHERE id=?").run(bookingId);
+assert.equal((await (await customerReq('/api/me/bookings','GET',null,sessionCookie)).json()).bookings[0].status,'cancelled');
+assert.equal((await customerReq('/api/auth/logout','POST',{},sessionCookie)).status,200);
+assert.equal((await customerReq('/api/me/bookings','GET',null,sessionCookie)).status,401);
+sqlite.prepare('UPDATE customer_sessions SET expires_at=1 WHERE customer_id=?').run('other');
+assert.equal((await customerReq('/api/me/bookings','GET',null,'__Host-yoga_session='+otherToken)).status,401);
+globalThis.fetch=savedFetch;
+console.log('PASS: signed Google tokens, claim/signature rejection, CSRF, nonce replay, secure cookies, booking ownership, account isolation, payment/cancellation status, logout and expiration.');

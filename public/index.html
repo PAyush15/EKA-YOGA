@@ -8,6 +8,7 @@
   <title>Book a Class • Yoga by Krunali</title>
   <link rel="stylesheet" href="./styles.css" />
   <script defer src="./app.js"></script>
+  <script defer src="./account.js"></script>
 </head>
 <body>
   <div class="announcement">BREATHE DEEPLY. MOVE MINDFULLY. FEEL GOOD.</div>
@@ -16,7 +17,7 @@
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 45 45" fill="none"><path d="M22.5 36C7.7 29.8 11 16.8 22.5 8c11.5 8.8 14.8 21.8 0 28Z" stroke="currentColor" stroke-width="1.7"/><path d="M22.5 12v24M22.5 28c-7-8-13-8-15-7M22.5 28c7-8 13-8 15-7" stroke="currentColor" stroke-width="1.3"/></svg></span>
       <span><strong id="brandName">Yoga by Krunali</strong><small>AUSTIN, TEXAS</small></span>
     </a>
-    <nav><a href="#classes">Classes</a><a href="#about">How it works</a><a class="nav-admin" href="/admin">Studio login ↗</a></nav>
+    <nav><a href="#classes">Classes</a><a href="#about">How it works</a><a id="accountLink" href="#account">Sign up / Log in</a><a class="nav-admin" href="/admin">Studio login ↗</a></nav>
   </header>
   <main>
     <section class="hero wrap">
@@ -45,7 +46,7 @@
 <article class="course-card" data-minutes="60" data-cents="10000"><strong>Foundation Class</strong><p>In this class, Each pose will explain and demonstrated in detail, with a focus on proper alignment, breathing techniques, and step-by-step guidance. so you can get much benefits and avoid mistakes. (Everyone is welcome)</p><p>60 min · $100.00</p><button type="button" class="book-course" aria-label="Book Foundation Class">Book class →</button></article>
 <article class="course-card" data-minutes="70" data-cents="8500"><strong>Group Yoga Session</strong><p>Exercises for all over body. Bring your mat, Room temperature water bottle, Towel, Comfy cloths and most importantly, Bring yourself. (10 people Max)</p><p>70 min · $85 total for 1–10 people</p><button type="button" class="book-course" aria-label="Book Group Yoga Session">Book class →</button></article>
 <article class="course-card" data-minutes="60" data-cents="5000"><strong>Office Workers session</strong><p>Designed especially for office workers, these sessions focus on desk-related stiffness, neck and shoulder tension, posture, and stress relief. (4 people max)</p><p>60 min · $50.00</p><button type="button" class="book-course" aria-label="Book Office Workers session">Book class →</button></article></div>
-          <div id="lengthBox" hidden><label>Session length<select id="duration"></select></label><label id="customBox" hidden>Custom duration (minutes)<input type="number" id="minutes" value="75" min="15" max="360"></label><p id="rateNote"></p></div>
+
         </aside>
         <div class="booking-panel">
           <div class="progress"><span class="progress-step active" id="p1">1 <span>Class</span></span><span class="progress-line"></span><span class="progress-step" id="p2">2 <span>Time</span></span><span class="progress-line"></span><span class="progress-step" id="p3">3 <span>Details</span></span></div>
@@ -54,6 +55,8 @@
             <div class="selected-course" id="selectedCourse"></div>
             <div class="panel-label"><span>02</span><h3>Select a date & time</h3></div>
             <p>Austin time · Book from 48 hours to four weeks ahead.</p><p id="availabilityNote" role="status"></p><div id="days"></div><button class="back-link" id="next">Show next week ↓</button>
+          <div id="lengthBox" hidden><label>Session length<select id="duration"></select></label><label id="customBox" hidden>Custom duration (minutes)<input type="number" id="minutes" value="75" min="15" max="360"></label><p id="rateNote"></p></div>
+            <p id="selectedTime" role="status">Select a time above.</p><button id="continueTime" type="button" class="primary-btn" disabled>Continue to details →</button>
           </div>
           <div id="detailsStep" hidden>
             <button id="backButton" type="button" class="back-link">← Change date or time</button>
@@ -63,6 +66,7 @@
               <div class="form-row"><label>First name <span>*</span><input name="first_name" autocomplete="given-name" required maxlength="70" /></label><label>Last name <span>*</span><input name="last_name" autocomplete="family-name" required maxlength="70" /></label></div>
               <div class="form-row"><label>Email address <span>*</span><input type="email" name="email" autocomplete="email" required maxlength="200" /></label><label>Phone / WhatsApp *<input type="tel" required name="phone" autocomplete="tel" maxlength="50" /></label></div>
               <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
+              <p id="accountBookingNote">Sign in above before booking to save this session to your account, or continue as a guest.</p>
               <p class="privacy">We use your information only to manage your booking and send related messages.</p>
               <div id="formError" role="alert" class="form-error" hidden></div>
               <button id="submitBooking" type="submit" class="primary-btn">Confirm reservation <span>→</span></button>
@@ -73,11 +77,18 @@
         </div>
       </div>
     </section>
+    <section class="section wrap" id="account" tabindex="-1" hidden>
+      <div class="section-top"><div><div class="eyebrow olive">YOUR PRACTICE</div><h2>My sessions</h2></div><button id="closeAccount" class="back-link" type="button">Close ×</button></div>
+      <p id="accountMessage" role="status"></p>
+      <div id="signedOut"><p>Create your account or log in with Google to keep your booked sessions in one place. No separate password needed.</p><div id="googleSignIn"></div><button type="button" id="retrySignIn" class="back-link" hidden>Try sign-in again</button></div>
+      <div id="signedIn" hidden><p id="accountIdentity"></p><button type="button" class="back-link" id="refreshSessions">Refresh sessions</button><button type="button" class="back-link" id="logout">Log out</button><div id="mySessions" class="session-list"></div><p>Only bookings made while signed in appear here. For an earlier guest booking, contact your instructor with your booking reference.</p></div>
+    </section>
     <section class="footer-info" id="about"><div class="wrap footer-info-grid"><div><div class="eyebrow">A MORE MINDFUL ROUTINE</div><h2>Start where you are.<br><em>Grow from there.</em></h2></div><div><h3>What to expect</h3><p>Book a time that works for you. We’ll confirm your address before the visit. On the day, set out your mat, keep some water nearby, and leave enough room to stretch.</p></div></div></section>
   </main>
   <footer class="site-footer wrap"><span>© <span id="year"></span> <span id="footerStudio">Yoga by Krunali</span></span><span>Built for mindful moments. <a href="/admin">Admin ↗</a></span></footer>
 <a id="whatsapp" class="chat" hidden target="_blank" rel="noopener"></a>
 </body>
 </html>
+
 
 

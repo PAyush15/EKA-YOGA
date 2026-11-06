@@ -32,3 +32,32 @@ npx wrangler secret put NOTIFY_SHARED_SECRET
 
 Enter the /exec URL and the matching secret respectively. Keep credentials outside GitHub. A booking triggers a studio notification and a customer reservation email with payment instructions. After verifying the transfer, open /admin → Recent reservations → Mark paid. This updates Upcoming sessions to Paid · Confirmed and triggers separate confirmation emails to both recipients. If the Apps Script web app already exists, update its deployment to a new version after replacing Code.gs. GitHub Pages is a browser-only demo and does not send mail. Delivery is best effort without retries. Make one test reservation and verify both inboxes before sharing the site.
 
+
+## Customer signup, Google login and My sessions
+
+Google is the signup and login method: the first successful Google sign-in creates an account. No separate email/password registration is included. Guests can still book. Signed-in bookings use the account email and appear under **My sessions**, with reserved/payment pending, paid/confirmed, or cancelled status. Refresh the list after an administrator changes a booking. Existing guest reservations are not automatically claimed by matching email addresses.
+
+### Enable on the live Cloudflare website
+
+1. Deploy the Worker if you have not already done so, using the first-deployment steps above. Copy its HTTPS website origin (for example `https://yoga-by-krunali.YOUR-SUBDOMAIN.workers.dev`). Use the Cloudflare website for real bookings and accounts; `github.io` remains a static demo.
+2. Open [Google Auth Platform](https://console.cloud.google.com/auth/overview), create/select a project, and configure Branding and Audience for Yoga by Krunali. Use your support email and the real website/privacy-policy URLs requested by Google. For public customers use an External audience; while testing, add your own Google account as a test user. Complete any production publishing/verification requirements shown by Google before opening sign-in to everyone.
+3. In **Clients → Create client**, choose **Web application**. Add your exact Cloudflare website origin under **Authorized JavaScript origins**: scheme and hostname only, with no `/public/` or other path. Add your custom-domain origin too if you use one. This implementation uses Google's JavaScript callback, so it does not require an authorized redirect URI. Use only basic identity scopes (`openid`, email, profile).
+4. Copy the client ID ending in `.apps.googleusercontent.com` into `vars.GOOGLE_CLIENT_ID` in `wrangler.jsonc`. This ID is public configuration; no Google client secret is needed or should be committed.
+5. Pull the latest repository code and run:
+
+   ```sh
+   npm ci
+   npm run db:remote
+   npm run deploy
+   ```
+
+   The schema adds four account tables without deleting existing bookings. Run the database update before deploying this version. Preserve existing Wrangler secrets, including admin and notification configuration.
+6. Open the live Cloudflare URL, click **Sign up / Log in**, and continue with Google. Book while signed in, then open **My sessions**. Verify the reservation appears as payment pending. Mark it paid in `/admin`, refresh My sessions and check it shows confirmed. Log out and verify sessions are no longer accessible. Use two different accounts to check each sees only its own bookings.
+
+Official Google setup reference: https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid
+
+### Security and verification
+
+The Worker verifies Google's RSA signature, issuer, audience, expiry, verified email and a one-use nonce. Accounts use Google's stable subject ID. Browser sessions last seven days and use random opaque tokens in Secure, HttpOnly, SameSite cookies; only token hashes are stored in D1. No Google tokens are saved in browser storage. Every customer session query is scoped to the authenticated account; typing another email cannot grant access. Login/logout require same-origin JSON requests. Private API responses are not cached.
+
+Run `node --experimental-sqlite tests/smoke.mjs` for booking and auth checks. Auth tests sign real RSA test credentials and mock only Google's public-key endpoint; an actual Google account login still needs the client configuration and live HTTPS deployment above.

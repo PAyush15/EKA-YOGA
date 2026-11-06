@@ -20,6 +20,8 @@
     "STUDIO_NAME": "Yoga by Krunali",
     "WHATSAPP_NUMBER": "",
     "PAYMENT_URL": "",
-    "PAYMENT_QR_PATH": ""
+    "PAYMENT_QR_PATH": "",
+    "GOOGLE_CLIENT_ID": ""
   }
 }
+

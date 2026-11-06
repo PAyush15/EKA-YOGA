@@ -1,3 +1,4 @@
+import { authRoute, currentUser } from './auth.js';
 // Cloudflare Worker: same-origin static site + JSON booking API + D1.
 const json = (value, status = 200, headers = {}) =>
   new Response(JSON.stringify(value), {
@@ -89,8 +90,11 @@ export default {
       if (!path.startsWith('/api/')) return env.ASSETS.fetch(request);
       if (!env.DB) return INVALID('Database not configured.', 503);
 
+      const authResponse = await authRoute(request, env, parseJSON);
+      if (authResponse) return authResponse;
+
       if (request.method === 'GET' && path === '/api/config')
-        return json({ studioName: env.STUDIO_NAME || 'Yoga Studio', timezone: env.STUDIO_TIMEZONE || 'America/Chicago', whatsapp: env.WHATSAPP_NUMBER || '' });
+        return json({ studioName: env.STUDIO_NAME || 'Yoga Studio', timezone: env.STUDIO_TIMEZONE || 'America/Chicago', whatsapp: env.WHATSAPP_NUMBER || '', googleClientId: env.GOOGLE_CLIENT_ID || '' });
 
       if (request.method === 'GET' && path === '/api/courses') {
         const { results } = await env.DB.prepare(`${courseSelect} WHERE active = 1 ORDER BY id`).all();
@@ -120,8 +124,10 @@ export default {
       if (request.method === 'POST' && path === '/api/bookings') {
         if (!sameOrigin(request)) return INVALID('Invalid origin.',403);
         const d = await parseJSON(request);
+        const customer = await currentUser(request, env);
+        if (d.account_required && !customer) return INVALID('Your sign-in expired. Please sign in again before booking.',401);
         const first = safeString(d.first_name,70), last = safeString(d.last_name,70);
-        const email = cleanEmail(d.email), phone = safeString(d.phone,50);
+        const email = cleanEmail(customer ? customer.email : d.email), phone = safeString(d.phone,50);
         if (!first || !last || !email || !/^[+\d(). -]+$/.test(phone) || phone.replace(/\D/g,'').length < 7 || d.website)
           return INVALID('Enter your name, email and phone number.');
         const duration = d.minutes, start = d.starts_at;
@@ -146,7 +152,8 @@ export default {
           env.DB.prepare(`INSERT INTO bookings(id,session_id,first_name,last_name,email,phone)
             SELECT ?,s.id,?,?,?,? FROM sessions s JOIN courses c ON c.id=s.course_id
             WHERE c.active=1 AND s.course_id=? AND s.starts_at=? AND s.ends_at=? AND s.cancelled=0 AND NOT ${busy}`)
-            .bind(id,first,last,email,phone,course.id,start,end,end,start)
+            .bind(id,first,last,email,phone,course.id,start,end,end,start),
+          ...(customer ? [env.DB.prepare('INSERT INTO customer_bookings(booking_id,customer_id) SELECT id,? FROM bookings WHERE id=?').bind(customer.id,id)] : [])
         ]);
         if (!reservation.meta.changes) return INVALID('That time is unavailable. Choose another start time.',409);
         const standard = duration === course.duration_minutes;
@@ -248,6 +255,7 @@ export default {
     }
   }
 };
+
 
 
 

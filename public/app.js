@@ -6,7 +6,7 @@ const dayLabel = new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'long',
 const clock = new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
 let live=false, selection=0, catalog=[];
 const pagesPreview=location.hostname.endsWith('.github.io') || location.protocol==='file:';
-let course, selected, intervals=[], week=0;
+let course, selected, chosenDay, chosenTime, intervals=[], week=0;
 function node(tag,text,cls){
   const n=document.createElement(tag); n.textContent=text;
   if(cls)n.className=cls;
@@ -47,14 +47,24 @@ function available(start){
 function pick(day,time){
   const start=startFor(day,time);
   if(!available(start)){notice('Choose an available time and a duration of 15–360 minutes.');return;}
-  selected=new Date(start).toISOString();
-  $('bookingSummary').textContent=course.title+' · '+day+' · '+time+' Austin time · '+minutes()+' min · '+$('rateNote').textContent;
+  selected=new Date(start).toISOString();chosenDay=day;chosenTime=time;
+  renderDays();
+  $('lengthBox').scrollIntoView({block:'nearest'});
+}
+$('continueTime').onclick=()=>{
+  if(!selected || !available(Date.parse(selected))){notice('Choose an available date, time and session length.');return;}
+  $('bookingSummary').textContent=course.title+' · '+chosenDay+' · '+chosenTime+' Austin time · '+minutes()+' min · '+$('rateNote').textContent;
   $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').hidden=false;
   $('previewDetails').hidden=live;
   $('submitBooking').textContent=pagesPreview?'Continue to sample payment →':'Confirm reservation →';
+  window.prefillAccount?.();
   $('bookingForm').elements.first_name.focus();
-}
+};
+
 function renderDays(){
+  if(selected && !available(Date.parse(selected))){selected=null;chosenDay=null;chosenTime=null;}
+  $('selectedTime').textContent=selected?chosenDay+' · '+chosenTime+' Austin time · '+minutes()+' min':'Select a time above.';
+  $('continueTime').disabled=!selected;
   const open=$('days').querySelector('details[open]')?.dataset.day;
   $('days').replaceChildren();$('next').hidden=week>=3;
   $('customBox').hidden=$('duration').value!=='custom';
@@ -67,7 +77,7 @@ function renderDays(){
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
     for(const time of ['08:00','10:00','14:00','17:30']){
-      const b=button(time,()=>pick(day,time));b.disabled=!available(startFor(day,time));slots.append(b);
+      const b=button(time,()=>pick(day,time));b.disabled=!available(startFor(day,time));b.classList.toggle('selected',chosenDay===day && chosenTime===time);b.setAttribute('aria-pressed',String(chosenDay===day && chosenTime===time));slots.append(b);
     }
     const custom=node('div','','custom-time');custom.hidden=true;
     const input=document.createElement('input');input.type='time';input.min='07:00';input.max='19:00';input.value='07:30';input.setAttribute('aria-label','Custom Austin start time');
@@ -78,7 +88,7 @@ function renderDays(){
 async function refresh(){intervals=(await api('/api/busy')).intervals.map(x=>({start:Date.parse(x.starts_at),end:Date.parse(x.ends_at)}));}
 async function choose(c){
   const token=++selection;
-  course=c;week=0;live=false;intervals=[];notice('');$('duration').replaceChildren();
+  course=c;selected=null;chosenDay=null;chosenTime=null;week=0;live=false;intervals=[];notice('');$('duration').replaceChildren();
     for(const m of new Set([c.duration_minutes,60,90,120,'custom'])){
       $('duration').add(new Option(({60:'1 hour',90:'1.5 hours',120:'2 hours',custom:'Custom duration'})[m]||m+' minutes',m));
     }
@@ -116,12 +126,12 @@ $('bookingForm').onsubmit=async e=>{
   if(!live)return;
   $('submitBooking').disabled=true;
   try{
-    const data=await api('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),course_id:course.id,starts_at:selected,minutes:minutes()})});
+    const data=await api('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),course_id:course.id,starts_at:selected,minutes:minutes(),account_required:!!window.customerAccount})});
     $('confirmationText').textContent=$('bookingSummary').textContent+' · '+data.instructions;
     $('confirmationCode').textContent='Booking reference: '+data.id;$('payment').replaceChildren();
     if(data.paymentUrl){const link=node('a','Pay for your session','hero-link');link.href=data.paymentUrl;$('payment').append(link);}
     if(data.qr){const img=new Image(160,160);img.src=data.qr;img.alt='Scan to pay';$('payment').append(img);}
-    step('successStep');e.target.reset();
+    step('successStep');e.target.reset();window.prefillAccount?.();window.dispatchEvent(new Event('booking-saved'));
   }catch(err){$('formError').textContent=err.message;$('formError').hidden=false;try{await refresh();}catch{}}
   finally{$('submitBooking').disabled=false;}
 };
@@ -161,4 +171,5 @@ if(!pagesPreview)api('/api/config').then(cfg=>{
     const a=$('whatsapp');a.href='https://wa.me/'+digits;a.textContent='Questions? WhatsApp +'+digits;a.hidden=false;
   }
 }).catch(()=>{}); // Optional contact settings load independently of the classes.
+
 
