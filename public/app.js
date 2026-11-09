@@ -134,7 +134,15 @@ function renderDays(){
       if(h<7||h>19||(h===19&&m>0)){notice('Choose a start time from 7:00 AM to 7:00 PM.');return;}
       notice('');pick(day,String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
     }));
-    row.append(slots,button('Custom start time',()=>{custom.hidden=!custom.hidden;},'back-link'),custom);$('days').append(row);
+    custom.id='custom-time-'+day;
+    const customButton=button('Choose a custom time +',()=>{
+      custom.hidden=!custom.hidden;
+      customButton.setAttribute('aria-expanded',String(!custom.hidden));
+      customButton.textContent=custom.hidden?'Choose a custom time +':'Hide custom time −';
+    },'custom-time-toggle');
+    customButton.setAttribute('aria-expanded','false');
+    customButton.setAttribute('aria-controls',custom.id);
+    row.append(slots,customButton,custom);$('days').append(row);
   }
 }
 async function refresh(){intervals=(await api('/api/busy')).intervals.map(x=>({start:Date.parse(x.starts_at),end:Date.parse(x.ends_at)}));}
