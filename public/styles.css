@@ -36,3 +36,5 @@
 .account-dialog .section-top h2{font-size:32px}
 #accountLink{background:transparent;color:var(--ink);font:inherit;cursor:pointer}
 body:has(.account-dialog[open]){overflow:hidden}
+
+.course-photo{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:14px;margin:14px 0 18px;background:#e8eee4}

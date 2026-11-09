@@ -176,10 +176,17 @@ $('bookingForm').onsubmit=async e=>{
 };
 $('bookAnother').onclick=()=>{step('choosePrompt');$('courseList').scrollIntoView();};
 $('year').textContent=new Date().getFullYear();
+document.querySelectorAll('.course-photo').forEach(img=>{img.addEventListener('error',()=>{img.src='./home-yoga.webp';img.alt='Yoga practice';},{once:true});if(img.complete && !img.naturalWidth){img.src='./home-yoga.webp';img.alt='Yoga practice';}});
+const coursePhotos={"Private yoga (1 : 1)":{"src":"https://images.pexels.com/photos/8436411/pexels-photo-8436411.jpeg?auto=compress&cs=tinysrgb&w=640","alt":"Yoga instructor guiding an individual student"},"Small Group Yoga":{"src":"https://images.pexels.com/photos/8436725/pexels-photo-8436725.jpeg?auto=compress&cs=tinysrgb&w=640","alt":"A small group practicing seated yoga together"},"Foundation Class":{"src":"https://images.pexels.com/photos/4056444/pexels-photo-4056444.jpeg?auto=compress&cs=tinysrgb&w=640","alt":"Instructor guiding a student through a yoga pose"},"Group Yoga Session":{"src":"https://images.pexels.com/photos/8436605/pexels-photo-8436605.jpeg?auto=compress&cs=tinysrgb&w=640","alt":"A group practicing yoga poses together"},"Office Workers session":{"src":"https://images.pexels.com/photos/8436731/pexels-photo-8436731.jpeg?auto=compress&cs=tinysrgb&w=640","alt":"A guided seated yoga and relaxation session"}};
 function renderCatalog(courses) {
   const cards=courses.map(c=>{
     const card=node('article','','course-card');
-    card.append(node('strong',c.title),node('p',c.description),
+    card.append(node('strong',c.title));
+    const photo=coursePhotos[c.title];
+    if(photo){
+      const img=new Image(640,427);img.className='course-photo';img.src=photo.src;img.alt=photo.alt;img.loading='lazy';img.decoding='async';img.referrerPolicy='no-referrer';img.addEventListener('error',()=>{img.src='./home-yoga.webp';img.alt='Yoga practice';},{once:true});card.append(img);
+    }
+    card.append(node('p',c.description),
       node('p',c.duration_minutes+' min · '+sessionPrice(c)),
       node('button','Book class →','book-course'));
     card.dataset.id=c.id;card.dataset.minutes=c.duration_minutes;card.dataset.cents=c.price_cents;
