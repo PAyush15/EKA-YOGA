@@ -17,7 +17,7 @@ function doPost(e) {
     }
     const name = String(payload.firstName || '') + ' ' + String(payload.lastName || '');
     const course = String(payload.course || 'Yoga class');
-    const zoned = Utilities.formatDate(new Date(payload.startsAt), String(payload.studioTimezone || 'America/Chicago'), 'EEE, dd MMM yyyy, HH:mm z');
+    const zoned = Utilities.formatDate(new Date(payload.startsAt), String(payload.studioTimezone || 'America/Chicago'), 'EEE, dd MMM yyyy, hh:mm a z');
     const studio = String(payload.studioName || 'Yoga Studio');
     const booking = String(payload.id || '');
     const details = course + '\n' + zoned + ' · ' + payload.duration + ' minutes\nBooking reference: ' + booking;

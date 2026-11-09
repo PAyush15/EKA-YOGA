@@ -130,13 +130,14 @@ export default {
         const email = cleanEmail(customer ? customer.email : d.email), phone = safeString(d.phone,50);
         if (!first || !last || !email || !/^[+\d(). -]+$/.test(phone) || phone.replace(/\D/g,'').length < 7 || d.website)
           return INVALID('Enter your name, email and phone number.');
-        const duration = d.minutes, start = d.starts_at;
-        if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+48*3600000 || Date.parse(start)>Date.now()+28*86400000 ||
-            !Number.isInteger(duration) || duration < 15 || duration > 360) return INVALID('Choose a time between 48 hours and four weeks ahead and a duration of 15–360 minutes.');
+        const start = d.starts_at;
+        if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+48*3600000 || Date.parse(start)>Date.now()+28*86400000) return INVALID('Choose a time between 48 hours and four weeks ahead.');
         const clock = new Intl.DateTimeFormat('en-GB',{timeZone:env.STUDIO_TIMEZONE,hour:'2-digit',minute:'2-digit'}).format(new Date(start));
-        if (clock < '07:00' || clock > '19:00') return INVALID('Choose an Austin start time between 07:00 and 19:00.');
+        if (clock < '07:00' || clock > '19:00') return INVALID('Choose an Austin start time between 7:00 AM and 7:00 PM.');
         const course = await env.DB.prepare('SELECT * FROM courses WHERE id=? AND active=1').bind(Number(d.course_id)||0).first();
         if (!course) return INVALID('Class unavailable.');
+        const duration = course.duration_minutes;
+        if(d.minutes!==undefined && d.minutes!==duration) return INVALID('This class has a fixed duration of '+duration+' minutes.');
         // Verify before any reservation or notification is created. Fail closed.
         if (!env.TURNSTILE_SECRET_KEY) return INVALID('Booking verification is not configured. Please contact the studio.',503);
         const token=d['cf-turnstile-response'];

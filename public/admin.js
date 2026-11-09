@@ -1,6 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id);
-const displayDate=iso=>new Intl.DateTimeFormat('en-GB',{dateStyle:'medium',timeStyle:'short',timeZone:'America/Chicago'}).format(new Date(iso));
+const displayDate=iso=>new Intl.DateTimeFormat('en-GB',{dateStyle:'medium',timeStyle:'short',timeZone:'America/Chicago',hour12:true}).format(new Date(iso));
 const esc=str=>String(str??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let state={courses:[],sessions:[],bookings:[]};
 function msg(message,bad=false){const box=$('adminMessage');box.textContent=message;box.className='admin-toast'+(bad?' bad':'');box.hidden=false;window.scrollTo({top:0,behavior:'smooth'});}

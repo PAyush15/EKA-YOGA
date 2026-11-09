@@ -65,7 +65,8 @@ function sessionPrice(c){
   if(c.title==='Group Yoga Session')return amount+' total for 1–10 people';
   return amount;
 }
-function minutes(){return Number($('duration').value==='custom'?$('minutes').value:$('duration').value);}
+function minutes(){return course.duration_minutes;}
+function timeLabel(time){const [h,m]=time.split(':').map(Number);return (h%12||12)+':'+String(m).padStart(2,'0')+' '+(h<12?'AM':'PM');}
 function startFor(day,time){
   // Austin changes offset before 07:00. UTC noon is on the same day's daytime offset.
   const offset=12-Number(clock.format(new Date(day+'T12:00:00Z')).slice(0,2));
@@ -78,14 +79,14 @@ function available(start){
 }
 function pick(day,time){
   const start=startFor(day,time);
-  if(!available(start)){notice('Choose an available time and a duration of 15–360 minutes.');return;}
+  if(!available(start)){notice('Choose an available time.');return;}
   selected=new Date(start).toISOString();chosenDay=day;chosenTime=time;
   renderDays();
   $('lengthBox').scrollIntoView({block:'nearest'});
 }
 $('continueTime').onclick=()=>{
-  if(!selected || !available(Date.parse(selected))){notice('Choose an available date, time and session length.');return;}
-  $('bookingSummary').textContent=course.title+' · '+chosenDay+' · '+chosenTime+' Austin time · '+minutes()+' min · '+$('rateNote').textContent;
+  if(!selected || !available(Date.parse(selected))){notice('Choose an available date and time.');return;}
+  $('bookingSummary').textContent=course.title+' · '+chosenDay+' · '+timeLabel(chosenTime)+' Austin time · '+minutes()+' min · '+$('rateNote').textContent;
   $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').hidden=false;
   $('previewDetails').hidden=live;
   $('submitBooking').textContent=pagesPreview?'Continue to sample payment →':'Confirm reservation →';
@@ -95,12 +96,12 @@ $('continueTime').onclick=()=>{
 
 function renderDays(){
   if(selected && !available(Date.parse(selected))){selected=null;chosenDay=null;chosenTime=null;}
-  $('selectedTime').textContent=selected?chosenDay+' · '+chosenTime+' Austin time · '+minutes()+' min':'Select a time above.';
+  $('selectedTime').textContent=selected?chosenDay+' · '+timeLabel(chosenTime)+' Austin time · '+minutes()+' min':'Select a time above.';
   $('continueTime').disabled=!selected;
   const open=$('days').querySelector('details[open]')?.dataset.day;
   $('days').replaceChildren();$('next').hidden=week>=3;
-  $('customBox').hidden=$('duration').value!=='custom';
-  $('rateNote').textContent=minutes()===course.duration_minutes?sessionPrice(course):'Studio will confirm the price for this duration.';
+  $('fixedDuration').textContent=minutes()+' minutes';
+  $('rateNote').textContent=sessionPrice(course);
   const first=Date.parse(dateKey.format(new Date(Date.now()+2*dayMs))+'T12:00:00Z');
   for(let i=0;i<7*(week+1);i++){
     const date=new Date(first+i*dayMs), day=date.toISOString().slice(0,10);
@@ -109,21 +110,27 @@ function renderDays(){
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
     for(const time of ['08:00','10:00','14:00','17:30']){
-      const b=button(time,()=>pick(day,time));b.disabled=!available(startFor(day,time));b.classList.toggle('selected',chosenDay===day && chosenTime===time);b.setAttribute('aria-pressed',String(chosenDay===day && chosenTime===time));slots.append(b);
+      const b=button(timeLabel(time),()=>pick(day,time));b.disabled=!available(startFor(day,time));b.classList.toggle('selected',chosenDay===day && chosenTime===time);b.setAttribute('aria-pressed',String(chosenDay===day && chosenTime===time));slots.append(b);
     }
     const custom=node('div','','custom-time');custom.hidden=true;
-    const input=document.createElement('input');input.type='time';input.min='07:00';input.max='19:00';input.value='07:30';input.setAttribute('aria-label','Custom Austin start time');
-    custom.append(input,button('Use time',()=>{if(input.value && input.reportValidity())pick(day,input.value);}));
+    const hour=document.createElement('select'),minute=document.createElement('select'),period=document.createElement('select');
+    hour.setAttribute('aria-label','Custom start hour');minute.setAttribute('aria-label','Custom start minute');period.setAttribute('aria-label','AM or PM');
+    for(let h=1;h<=12;h++)hour.add(new Option(String(h),h));
+    for(let m=0;m<60;m++)minute.add(new Option(String(m).padStart(2,'0'),m));
+    for(const p of ['AM','PM'])period.add(new Option(p,p));
+    hour.value='7';minute.value='30';
+    custom.append(hour,minute,period,node('p','Choose a start time from 7:00 AM to 7:00 PM.'),button('Use time',()=>{
+      const h=Number(hour.value)%12+(period.value==='PM'?12:0),m=Number(minute.value);
+      if(h<7||h>19||(h===19&&m>0)){notice('Choose a start time from 7:00 AM to 7:00 PM.');return;}
+      notice('');pick(day,String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
+    }));
     row.append(slots,button('Custom start time',()=>{custom.hidden=!custom.hidden;},'back-link'),custom);$('days').append(row);
   }
 }
 async function refresh(){intervals=(await api('/api/busy')).intervals.map(x=>({start:Date.parse(x.starts_at),end:Date.parse(x.ends_at)}));}
 async function choose(c){
   const token=++selection;
-  course=c;selected=null;chosenDay=null;chosenTime=null;week=0;live=false;intervals=[];notice('');$('duration').replaceChildren();
-    for(const m of new Set([c.duration_minutes,60,90,120,'custom'])){
-      $('duration').add(new Option(({60:'1 hour',90:'1.5 hours',120:'2 hours',custom:'Custom duration'})[m]||m+' minutes',m));
-    }
+  course=c;selected=null;chosenDay=null;chosenTime=null;week=0;live=false;intervals=[];notice('');
   $('selectedCourse').textContent=c.title;
   step('dateStep');renderDays();
   $('dateStep').scrollIntoView({block:'start'});
@@ -141,7 +148,6 @@ async function choose(c){
     if(!$('detailsStep').hidden){step('dateStep');}
   }catch{if(token===selection)$('availabilityNote').textContent='Preview times · Live availability could not be verified.';}
 }
-$('duration').onchange=renderDays;$('minutes').oninput=renderDays;
 $('next').onclick=()=>{const added=$('days').children.length;week=Math.min(3,week+1);renderDays();$('days').children[added]?.querySelector('summary')?.focus();};
 $('backButton').onclick=()=>{step('dateStep');renderDays();};
 $('bookingForm').onsubmit=async e=>{
