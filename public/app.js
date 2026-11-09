@@ -80,7 +80,7 @@ function weekendBlocked(start){
 function available(start){
   const length=minutes();
   if(weekendBlocked(start))return false;
-  return Number.isInteger(length)&&length>=15&&length<=360&&(live || pagesPreview) && start>=Date.now()+2*dayMs && start<=Date.now()+28*dayMs &&
+  return Number.isInteger(length)&&length>=15&&length<=360&&(live || pagesPreview) && start>=Date.now()+2*3600000 && start<=Date.now()+28*dayMs &&
     !intervals.some(i=>start<i.end && start+length*60000>i.start);
 }
 function pick(day,time){
@@ -90,7 +90,8 @@ function pick(day,time){
   renderDays();
   $('lengthBox').scrollIntoView({block:'nearest'});
 }
-$('continueTime').onclick=()=>{
+$('continueTime').onclick=async()=>{
+  if(live){try{await refresh();}catch{notice('Could not verify availability. Please try again.');return;}}
   if(!selected || !available(Date.parse(selected))){notice('Choose an available date and time.');return;}
   $('bookingSummary').textContent=course.title+' · '+chosenDay+' · '+timeLabel(chosenTime)+' Austin time · '+minutes()+' min · '+$('rateNote').textContent;
   $('formError').hidden=true;notice('');step('detailsStep');$('bookingForm').hidden=false;
@@ -108,7 +109,7 @@ function renderDays(){
   $('days').replaceChildren();$('next').hidden=week>=3;
   $('fixedDuration').textContent=minutes()+' minutes';
   $('rateNote').textContent=sessionPrice(course);
-  const first=Date.parse(dateKey.format(new Date(Date.now()+2*dayMs))+'T12:00:00Z');
+  const first=Date.parse(dateKey.format(new Date(Date.now()+2*3600000))+'T12:00:00Z');
   for(let i=0;i<7*(week+1);i++){
     const date=new Date(first+i*dayMs), day=date.toISOString().slice(0,10);
     if(day>dateKey.format(new Date(Date.now()+28*dayMs)))break;
@@ -116,9 +117,10 @@ function renderDays(){
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
     for(const time of ['08:00','10:00','14:00','17:30']){
-      if(weekendBlocked(startFor(day,time)))continue;
+      if(!available(startFor(day,time)))continue;
       const b=button(timeLabel(time),()=>pick(day,time));b.disabled=!available(startFor(day,time));b.classList.toggle('selected',chosenDay===day && chosenTime===time);b.setAttribute('aria-pressed',String(chosenDay===day && chosenTime===time));slots.append(b);
     }
+    if(!slots.children.length)slots.append(node('p','No preset times available. Try another date or a custom time.','muted'));
     const custom=node('div','','custom-time');custom.hidden=true;
     const hour=document.createElement('select'),minute=document.createElement('select'),period=document.createElement('select');
     hour.setAttribute('aria-label','Custom start hour');minute.setAttribute('aria-label','Custom start minute');period.setAttribute('aria-label','AM or PM');
@@ -167,7 +169,7 @@ async function choose(c){
   }catch{if(token===selection)$('availabilityNote').textContent='Preview times · Live availability could not be verified.';}
 }
 $('next').onclick=()=>{const added=$('days').children.length;week=Math.min(3,week+1);renderDays();$('days').children[added]?.querySelector('summary')?.focus();};
-$('backButton').onclick=()=>{step('dateStep');renderDays();};
+$('backButton').onclick=async()=>{if(live){try{await refresh();}catch{notice('Could not refresh availability.');}}step('dateStep');renderDays();};
 $('bookingForm').onsubmit=async e=>{
   e.preventDefault();if(pagesPreview){
     $('resultTitle').textContent='Sample payment';
@@ -180,6 +182,7 @@ $('bookingForm').onsubmit=async e=>{
     e.target.reset();step('successStep');$('successStep').scrollIntoView({block:'start'});return;
   }
   if(!live)return;
+  if(!selected || !available(Date.parse(selected))){$('formError').textContent='Please choose a new time at least two hours from now.';$('formError').hidden=false;return;}
   if(!securityToken){$('formError').textContent='Please complete the security check before booking.';$('formError').hidden=false;return;}
   $('submitBooking').disabled=true;
   try{

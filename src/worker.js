@@ -131,7 +131,7 @@ export default {
         if (!first || !last || !email || !/^[+\d(). -]+$/.test(phone) || phone.replace(/\D/g,'').length < 7 || d.website)
           return INVALID('Enter your name, email and phone number.');
         const start = d.starts_at;
-        if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+48*3600000 || Date.parse(start)>Date.now()+28*86400000) return INVALID('Choose a time between 48 hours and four weeks ahead.');
+        if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+2*3600000 || Date.parse(start)>Date.now()+28*86400000) return INVALID('Choose a time between two hours and four weeks ahead.');
         const clock = new Intl.DateTimeFormat('en-GB',{timeZone:env.STUDIO_TIMEZONE,hour:'2-digit',minute:'2-digit'}).format(new Date(start));
         if (clock < '07:00' || clock > '19:00') return INVALID('Choose an Austin start time between 7:00 AM and 7:00 PM.');
         const weekday=new Intl.DateTimeFormat('en-US',{timeZone:env.STUDIO_TIMEZONE,weekday:'short'}).format(new Date(start));

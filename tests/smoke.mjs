@@ -151,3 +151,27 @@ for(let offset=3;offset<=9;offset++){
  }
 }
 console.log('PASS: Saturday/Sunday excluded starts blocked; weekday starts reach verification.');
+
+const actualNow=Date.now;
+try {
+ Date.now=()=>Date.parse('2026-11-16T17:00:00.000Z');
+ for(const [delay,status] of [[60,400],[119,400],[120,403],[121,403]]){
+  const starts_at=new Date(Date.now()+delay*60000).toISOString();
+  assert.equal((await book(1,'17:00',60,{starts_at,'cf-turnstile-response':''})).status,status);
+ }
+} finally {Date.now=actualNow;}
+console.log('PASS: two-hour boundary rejects 1h/119m and permits 120m/121m to reach security verification.');
+// Test both email recipients without sending external mail.
+const vm=await import('node:vm');
+const sent=[];
+const context={PropertiesService:{getScriptProperties:()=>({getProperty:key=>({NOTIFY_SHARED_SECRET:'test-secret',ADMIN_EMAIL:'owner@example.org'})[key]})},Utilities:{formatDate:()=> 'Mon, Nov 16, 1:00 PM CST'},MailApp:{sendEmail:message=>sent.push(message)},ContentService:{createTextOutput:text=>text},console};
+vm.createContext(context);
+vm.runInContext(fs.readFileSync('google-apps-script/Code.gs','utf8'),context);
+const notification={secret:'test-secret',id:'test-booking',firstName:'Test',lastName:'Customer',email:'customer@example.org',phone:'+1 512 555 0123',course:'Private yoga',startsAt:'2026-11-16T19:00:00.000Z',duration:60,instructions:'Payment pending'};
+assert.equal(context.doPost({postData:{contents:JSON.stringify(notification)}}),'OK');
+assert.deepEqual(sent.map(m=>m.to),['customer@example.org','owner@example.org']);
+assert.ok(sent[1].body.includes('test-booking') && sent[1].body.includes(notification.phone));
+sent.length=0;
+context.doPost({postData:{contents:JSON.stringify({...notification,secret:'wrong'})}});
+assert.equal(sent.length,0);
+console.log('PASS: email script addresses customer and administrator, includes booking info, and rejects an invalid secret.');
