@@ -126,7 +126,10 @@ function renderDays(){
     for(let m=0;m<60;m++)minute.add(new Option(String(m).padStart(2,'0'),m));
     for(const p of ['AM','PM'])period.add(new Option(p,p));
     hour.value='7';minute.value='30';
-    custom.append(hour,minute,period,node('p','Choose a start time from 7:00 AM to 7:00 PM. Weekend starts at 2:00 PM and 5:30 PM are unavailable.'),button('Use time',()=>{
+    const timeRow=node('div','','custom-time-row');
+    const colon=node('span',':','time-colon');colon.setAttribute('aria-hidden','true');
+    timeRow.append(hour,colon,minute,period);
+    custom.append(timeRow,node('p','Choose a start time from 7:00 AM to 7:00 PM. Weekend starts at 2:00 PM and 5:30 PM are unavailable.'),button('Use time',()=>{
       const h=Number(hour.value)%12+(period.value==='PM'?12:0),m=Number(minute.value);
       if(h<7||h>19||(h===19&&m>0)){notice('Choose a start time from 7:00 AM to 7:00 PM.');return;}
       notice('');pick(day,String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
