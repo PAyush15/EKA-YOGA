@@ -72,8 +72,14 @@ function startFor(day,time){
   const offset=12-Number(clock.format(new Date(day+'T12:00:00Z')).slice(0,2));
   return Date.parse(day+'T'+time+':00Z')+offset*3600000;
 }
+function weekendBlocked(start){
+  const day=dateKey.format(new Date(start));
+  const weekday=new Date(day+'T12:00:00Z').getUTCDay();
+  return (weekday===0||weekday===6)&&['14:00','17:30'].includes(clock.format(new Date(start)));
+}
 function available(start){
   const length=minutes();
+  if(weekendBlocked(start))return false;
   return Number.isInteger(length)&&length>=15&&length<=360&&(live || pagesPreview) && start>=Date.now()+2*dayMs && start<=Date.now()+28*dayMs &&
     !intervals.some(i=>start<i.end && start+length*60000>i.start);
 }
@@ -110,6 +116,7 @@ function renderDays(){
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
     for(const time of ['08:00','10:00','14:00','17:30']){
+      if(weekendBlocked(startFor(day,time)))continue;
       const b=button(timeLabel(time),()=>pick(day,time));b.disabled=!available(startFor(day,time));b.classList.toggle('selected',chosenDay===day && chosenTime===time);b.setAttribute('aria-pressed',String(chosenDay===day && chosenTime===time));slots.append(b);
     }
     const custom=node('div','','custom-time');custom.hidden=true;
@@ -119,7 +126,7 @@ function renderDays(){
     for(let m=0;m<60;m++)minute.add(new Option(String(m).padStart(2,'0'),m));
     for(const p of ['AM','PM'])period.add(new Option(p,p));
     hour.value='7';minute.value='30';
-    custom.append(hour,minute,period,node('p','Choose a start time from 7:00 AM to 7:00 PM.'),button('Use time',()=>{
+    custom.append(hour,minute,period,node('p','Choose a start time from 7:00 AM to 7:00 PM. Weekend starts at 2:00 PM and 5:30 PM are unavailable.'),button('Use time',()=>{
       const h=Number(hour.value)%12+(period.value==='PM'?12:0),m=Number(minute.value);
       if(h<7||h>19||(h===19&&m>0)){notice('Choose a start time from 7:00 AM to 7:00 PM.');return;}
       notice('');pick(day,String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));

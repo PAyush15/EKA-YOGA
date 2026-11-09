@@ -134,6 +134,9 @@ export default {
         if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+48*3600000 || Date.parse(start)>Date.now()+28*86400000) return INVALID('Choose a time between 48 hours and four weeks ahead.');
         const clock = new Intl.DateTimeFormat('en-GB',{timeZone:env.STUDIO_TIMEZONE,hour:'2-digit',minute:'2-digit'}).format(new Date(start));
         if (clock < '07:00' || clock > '19:00') return INVALID('Choose an Austin start time between 7:00 AM and 7:00 PM.');
+        const weekday=new Intl.DateTimeFormat('en-US',{timeZone:env.STUDIO_TIMEZONE,weekday:'short'}).format(new Date(start));
+        if(['Sat','Sun'].includes(weekday)&&['14:00','17:30'].includes(clock))
+          return INVALID('Weekend starts at 2:00 PM and 5:30 PM are unavailable.');
         const course = await env.DB.prepare('SELECT * FROM courses WHERE id=? AND active=1').bind(Number(d.course_id)||0).first();
         if (!course) return INVALID('Class unavailable.');
         const duration = course.duration_minutes;

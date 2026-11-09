@@ -38,3 +38,5 @@
 body:has(.account-dialog[open]){overflow:hidden}
 
 .course-photo{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:14px;margin:14px 0 18px;background:#e8eee4}
+
+.brand-mark{width:48px;height:53px;flex-shrink:0}.brand-mark img{display:block;width:100%;height:100%}

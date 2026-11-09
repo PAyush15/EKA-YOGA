@@ -138,3 +138,16 @@ globalThis.fetch=savedFetch;
 console.log('PASS: signed Google tokens, claim/signature rejection, CSRF, nonce replay, secure cookies, booking ownership, account isolation, payment/cancellation status, logout and expiration.');
 
 globalThis.fetch=originalFetch;
+
+// Use Austin's local weekday and offset, including DST, for weekend exclusions.
+for(let offset=3;offset<=9;offset++){
+ const date=new Date(Date.now()+offset*86400000).toISOString().slice(0,10);
+ const weekday=new Date(date+'T12:00:00Z').getUTCDay();
+ const noonHour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'America/Chicago',hour:'2-digit',hourCycle:'h23'}).format(new Date(date+'T12:00:00Z')));
+ for(const time of ['14:00','17:30']){
+  const start=new Date(Date.parse(date+'T'+time+':00Z')+(12-noonHour)*3600000).toISOString();
+  const response=await book(1,'17:00',60,{starts_at:start,'cf-turnstile-response':''});
+  assert.equal(response.status,(weekday===0||weekday===6)?400:403);
+ }
+}
+console.log('PASS: Saturday/Sunday excluded starts blocked; weekday starts reach verification.');
