@@ -64,3 +64,7 @@ body:has(.account-dialog[open]){overflow:hidden}
 #about{scroll-margin-top:24px}
 @media(max-width:740px){.about-grid{grid-template-columns:1fr;gap:28px}.hero-copy{padding-top:30px}.hero-figure{max-width:380px}.site-header nav a:nth-child(2){display:inline}.announcement{padding:0 10px;text-align:center}}
 @media(max-width:420px){.brand strong{font-size:24px}.site-header{gap:10px}.site-header nav{gap:8px}.nav-admin{padding:8px}.about-benefits{gap:10px 18px}}
+
+.payment-method{padding:20px;border:1px solid var(--border);border-radius:16px;margin:16px 0;background:var(--paper)}
+.payment-method img{display:block;max-width:100%;height:auto;object-fit:contain;margin:18px auto}
+.payment-recipient{font-weight:700;overflow-wrap:anywhere}#confirmationText{white-space:pre-line}

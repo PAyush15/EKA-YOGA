@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import worker from '../src/worker.js';
+const realNow=Date.now; Date.now=()=>Date.parse('2026-11-10T22:00:00.000Z');
 const sqlite=new DatabaseSync(':memory:');
 sqlite.exec(fs.readFileSync('schema.sql','utf8'));
 
@@ -14,20 +15,25 @@ class Statement{
   async run(){const o=this.st.run(...this.params);return {meta:{changes:o.changes,last_row_id:Number(o.lastInsertRowid)}};}
 }
 const env={DB:{prepare:s=>new Statement(s),batch:async statements=>{sqlite.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());sqlite.exec('COMMIT');return results;}catch(e){sqlite.exec('ROLLBACK');throw e;}}},ASSETS:{fetch:async()=>new Response('<h1>Static</h1>')},ADMIN_USERNAME:'admin',ADMIN_PASSWORD:'test-password',STUDIO_TIMEZONE:'America/Chicago',STUDIO_NAME:'Studio Test'};
+let batchTail=Promise.resolve();
+const batch=env.DB.batch;
+env.DB.batch=statements=>{const next=batchTail.then(()=>batch(statements));batchTail=next.catch(()=>{});return next;};
 env.TURNSTILE_SECRET_KEY='test-secret';
 let verification={success:true,hostname:'test.example',action:'booking'};
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async()=>Response.json(verification);
-const ctx={waitUntil:p=>p.catch(console.error)};
+const pending=[];
+const ctx={waitUntil:p=>pending.push(p)};
+async function drain(){while(pending.length)await Promise.all(pending.splice(0));}
 async function req(path,method='GET',data=null,auth=false){
   const headers={};if(data)headers['content-type']='application/json';
   if(auth)headers.authorization='Basic '+btoa('admin:test-password');
-  return worker.fetch(new Request('https://test.example'+path,{method,headers,...(data?{body:JSON.stringify(data)}:{})}),env,ctx);
+  const r=await worker.fetch(new Request('https://test.example'+path,{method,headers,...(data?{body:JSON.stringify(data)}:{})}),env,ctx);await drain();return r;
 }
 
 const courses=(await (await req('/api/courses')).json()).courses;
-assert.deepEqual(courses.map(c=>[c.duration_minutes,c.price_cents]),[[60,8000],[70,5000],[60,10000],[70,8500],[60,5000]]);
-const day=new Date(Date.now()+4*86400000).toISOString().slice(0,10);
+assert.deepEqual(courses.map(c=>[c.duration_minutes,c.price_cents]),[[60,8000],[60,5000],[60,10000],[70,8500],[60,5000]]);
+const day=new Date(Date.now()+3*86400000).toISOString().slice(0,10);
 const at=t=>day+'T'+t+':00.000Z';
 const book=(course_id,t,minutes,extra={})=>req('/api/bookings','POST',{'cf-turnstile-response':'test-token',first_name:'Austin',last_name:'Guest',phone:'+1 512 555 0123',email:'guest@example.org',course_id,starts_at:at(t),minutes,...extra});
 assert.equal((await book(1,'17:00',60,{starts_at:new Date(Date.now()+3600000).toISOString()})).status,400);
@@ -49,17 +55,17 @@ globalThis.fetch=verifyFetch;
 assert.equal(sqlite.prepare('SELECT count(*) n FROM bookings').get().n,before);
 console.log('PASS: Turnstile missing token/secret, invalid token, hostname/action mismatch and network failure block reservations.');
 for(const c of courses)assert.equal((await book(c.id,'17:00',c.duration_minutes+30)).status,400,'custom duration rejected');
-const first=await book(2,'17:15',70);
+const first=await book(2,'17:15',60);
 assert.equal(first.status,201);const id=(await first.json()).id;
 assert.equal((await book(1,'17:00',60)).status,409);
-assert.equal((await book(3,'18:24',60)).status,409);
-assert.equal((await book(2,'17:15',70)).status,409);
-assert.equal((await book(3,'18:25',60)).status,201);
+assert.equal((await book(3,'18:14',60)).status,409);
+assert.equal((await book(2,'17:15',60)).status,409);
+assert.equal((await book(3,'18:15',60)).status,201);
 assert.equal((await req('/api/admin/bookings/'+id+'/paid','POST',{})).status,401);
 assert.equal((await req('/api/admin/bookings/'+id+'/paid','POST',{},true)).status,200);
 assert.equal((await req('/api/admin/bookings/'+id+'/paid','POST',{},true)).status,409);
 assert.equal((await req('/api/admin/bookings/'+id+'/cancel','POST',{},true)).status,200);
-assert.equal((await book(4,'17:15',70)).status,201);
+assert.equal((await book(1,'17:15',60)).status,201);
 console.log('PASS: catalog, cutoff, phone, start hours, cross-course conflict, touching intervals, protected payment action, cancellation and rebooking.');
 
 const distant=new Date(Date.now()+29*86400000);
@@ -88,7 +94,7 @@ globalThis.fetch=async (url,options)=>{
 };
 env.GOOGLE_CLIENT_ID='test-client.apps.googleusercontent.com';
 async function customerReq(path,method='GET',data=null,cookie='',origin='https://test.example') {
-  return worker.fetch(new Request('https://test.example'+path,{method,headers:{cookie,origin,'content-type':'application/json'},...(data!==null?{body:JSON.stringify(data)}:{})}),env,ctx);
+  const r=await worker.fetch(new Request('https://test.example'+path,{method,headers:{cookie,origin,'content-type':'application/json'},...(data!==null?{body:JSON.stringify(data)}:{})}),env,ctx);await drain();return r;
 }
 const b64=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
 async function credential(nonce,overrides={}){
@@ -152,26 +158,108 @@ for(let offset=3;offset<=9;offset++){
 }
 console.log('PASS: Saturday/Sunday excluded starts blocked; weekday starts reach verification.');
 
-const actualNow=Date.now;
-try {
- Date.now=()=>Date.parse('2026-11-16T17:00:00.000Z');
- for(const [delay,status] of [[60,400],[119,400],[120,403],[121,403]]){
-  const starts_at=new Date(Date.now()+delay*60000).toISOString();
-  assert.equal((await book(1,'17:00',60,{starts_at,'cf-turnstile-response':''})).status,status);
- }
-} finally {Date.now=actualNow;}
-console.log('PASS: two-hour boundary rejects 1h/119m and permits 120m/121m to reach security verification.');
+const {bookableStart,bookingWindow,withinHours}=await import('../public/booking-rules.js');
+assert.deepEqual(bookingWindow(),{first:'2026-11-13',last:'2026-12-08'});
+for(const [start,status] of [
+ ['2026-11-12T16:00:00.000Z',400], // Thursday
+ ['2026-11-13T14:00:00.000Z',403], // Friday 8 AM, under 72 elapsed hours
+ ['2026-11-13T13:59:00.000Z',400],
+ ['2026-11-14T00:30:00.000Z',403], // Friday 6:30 PM
+ ['2026-11-14T00:31:00.000Z',400],
+ ['2026-11-14T18:00:00.000Z',403], // Saturday noon
+ ['2026-11-14T18:01:00.000Z',400],
+ ['2026-11-15T14:00:00.000Z',403], // Sunday 8 AM
+ ['2026-11-15T20:00:00.000Z',400],
+ ['2026-12-09T00:30:00.000Z',403], // Last day in Austin, Dec 8
+ ['2026-12-09T14:00:00.000Z',400]
+]) {
+ assert.equal(bookableStart(Date.parse(start)),status===403,start);
+ assert.equal((await book(1,'17:00',60,{starts_at:start,'cf-turnstile-response':''})).status,status,start);
+}
+assert.deepEqual(bookingWindow(Date.parse('2026-11-11T05:59:00Z')),{first:'2026-11-13',last:'2026-12-08'});
+assert.deepEqual(bookingWindow(Date.parse('2026-11-11T06:00:00Z')),{first:'2026-11-14',last:'2026-12-09'});
+assert.equal(bookingWindow(Date.parse('2026-12-31T22:00:00Z')).first,'2027-01-03');
+assert.equal(bookableStart(Date.parse('2027-03-14T13:00:00Z'),Date.parse('2027-03-11T22:00:00Z')),true,'DST start: Sunday 8 AM');
+assert.equal(bookableStart(Date.parse('2027-11-07T14:00:00Z'),Date.parse('2027-11-04T21:00:00Z')),true,'DST end: Sunday 8 AM');
+console.log('PASS: three Austin calendar days, earliest morning, midnight rollover, month/year rollover, DST, weekday/weekend hours and 28-day limit.');
 // Test both email recipients without sending external mail.
 const vm=await import('node:vm');
 const sent=[];
-const context={PropertiesService:{getScriptProperties:()=>({getProperty:key=>({NOTIFY_SHARED_SECRET:'test-secret',ADMIN_EMAIL:'owner@example.org'})[key]})},Utilities:{formatDate:()=> 'Mon, Nov 16, 1:00 PM CST'},MailApp:{sendEmail:message=>sent.push(message)},ContentService:{createTextOutput:text=>text},console};
+const props={NOTIFY_SHARED_SECRET:'test-secret',ADMIN_EMAIL:'owner@example.org'};
+const context={PropertiesService:{getScriptProperties:()=>({getProperty:key=>props[key],getProperties:()=>({...props}),setProperty:(k,v)=>props[k]=v,deleteProperty:k=>delete props[k]})},LockService:{getScriptLock:()=>({tryLock:()=>true,hasLock:()=>true,releaseLock:()=>{}})},Utilities:{formatDate:()=> 'Mon, Nov 16, 1:00 PM CST'},MailApp:{sendEmail:message=>sent.push(message)},ContentService:{createTextOutput:text=>text},console};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('google-apps-script/Code.gs','utf8'),context);
-const notification={secret:'test-secret',id:'test-booking',firstName:'Test',lastName:'Customer',email:'customer@example.org',phone:'+1 512 555 0123',course:'Private yoga',startsAt:'2026-11-16T19:00:00.000Z',duration:60,instructions:'Payment pending'};
+const notification={secret:'test-secret',id:'11111111-1111-4111-8111-111111111111',firstName:'Test',lastName:'Customer',email:'customer@example.org',phone:'+1 512 555 0123',course:'Private yoga',startsAt:'2026-11-16T19:00:00.000Z',duration:60,instructions:'Payment pending'};
 assert.equal(context.doPost({postData:{contents:JSON.stringify(notification)}}),'OK');
 assert.deepEqual(sent.map(m=>m.to),['customer@example.org','owner@example.org']);
-assert.ok(sent[1].body.includes('test-booking') && sent[1].body.includes(notification.phone));
+assert.ok(sent[1].body.includes(notification.id) && sent[1].body.includes(notification.phone));
 sent.length=0;
 context.doPost({postData:{contents:JSON.stringify({...notification,secret:'wrong'})}});
 assert.equal(sent.length,0);
 console.log('PASS: email script addresses customer and administrator, includes booking info, and rejects an invalid secret.');
+
+assert.equal(context.doPost({postData:{contents:JSON.stringify(notification)}}),'OK');
+assert.equal(sent.length,0,'same event must not send twice');
+assert.equal(context.doPost({postData:{contents:JSON.stringify({...notification,paid:true})}}),'OK');
+assert.equal(sent.length,2,'paid event sends customer and owner');
+assert.ok(sent[0].subject.includes('confirmed'));assert.ok(sent[0].body.includes('60 minutes'));
+sent.length=0;
+const second={...notification,id:'22222222-2222-4222-8222-222222222222'};
+context.MailApp.sendEmail=m=>{if(m.to==='customer@example.org')throw Error('quota');sent.push(m);};
+assert.equal(context.doPost({postData:{contents:JSON.stringify(second)}}),'ERROR');
+assert.deepEqual(sent.map(m=>m.to),['owner@example.org'],'attempt owner when customer fails');
+sent.length=0;context.MailApp.sendEmail=m=>sent.push(m);
+assert.equal(context.doPost({postData:{contents:JSON.stringify(second)}}),'OK');
+assert.deepEqual(sent.map(m=>m.to),['customer@example.org'],'retry only failed recipient');
+console.log('PASS: pending/paid email content, duplicate suppression, partial failure and per-recipient retry.');
+
+const {deliverEmails}=await import('../src/notifications.js');
+env.NOTIFY_WEBHOOK_URL='https://script.google.com/macros/s/test/exec';env.NOTIFY_SHARED_SECRET='test-secret';
+// Exercise actual Worker -> webhook payload -> Apps Script handler; all email delivery is mocked.
+const webhookPayloads=[];
+globalThis.fetch=async(url,options)=>{
+ if(String(url).includes('/turnstile/'))return Response.json(verification);
+ assert.equal(String(url),env.NOTIFY_WEBHOOK_URL);
+ const payload=JSON.parse(options.body);webhookPayloads.push(payload);
+ return new Response(context.doPost({postData:{contents:options.body}}));
+};
+const liveBook=await book(1,'16:00',60,{starts_at:'2026-11-16T16:00:00.000Z'});
+assert.equal(liveBook.status,201);const liveId=(await liveBook.json()).id;
+assert.equal(webhookPayloads.at(-1).startsAt,'2026-11-16T16:00:00.000Z');
+assert.equal(webhookPayloads.at(-1).duration,60);
+assert.equal(sqlite.prepare('SELECT status FROM email_jobs WHERE booking_id=?').get(liveId).status,'sent');
+const busy=(await (await req('/api/busy')).json()).intervals;
+assert.ok(busy.some(i=>i.starts_at==='2026-11-16T16:00:00.000Z'&&i.ends_at==='2026-11-16T17:00:00.000Z'));
+assert.ok(busy.every(i=>Object.keys(i).sort().join(',')==='ends_at,starts_at'),'no customer data in public availability');
+assert.equal((await book(4,'16:00',70,{starts_at:'2026-11-16T16:30:00.000Z'})).status,409);
+assert.equal(webhookPayloads.length,1,'no email for rejected overlap');
+globalThis.fetch=async(url,options)=>String(url).includes('/turnstile/')?Response.json(verification):new Response('ERROR');
+const failedBook=await book(1,'16:00',60,{starts_at:'2026-11-17T16:00:00.000Z'});
+assert.equal(failedBook.status,201);const failedId=(await failedBook.json()).id;
+assert.equal(sqlite.prepare('SELECT status FROM email_jobs WHERE booking_id=?').get(failedId).status,'pending');
+assert.equal((await book(1,'16:00',60,{starts_at:'2026-11-17T16:00:00.000Z'})).status,409,'mail failure does not release reservation');
+globalThis.fetch=async(url)=>String(url).includes('/turnstile/')?Response.json(verification):new Response('OK');
+sqlite.prepare('UPDATE email_jobs SET next_attempt=0 WHERE booking_id=?').run(failedId);
+await deliverEmails(env,failedId);
+assert.equal(sqlite.prepare('SELECT status FROM email_jobs WHERE booking_id=?').get(failedId).status,'sent');
+assert.equal((await req('/api/admin/bookings/'+failedId+'/retry-email','POST',{})).status,401);
+const simultaneous=await Promise.all([1,3,4].map(course_id=>book(course_id,'16:00',course_id===4?70:60,{starts_at:'2026-11-18T16:00:00.000Z'})));
+assert.deepEqual(simultaneous.map(r=>r.status).sort(),[201,409,409],'only one concurrent request reserves an interval');
+assert.equal((await book(1,'16:00',60,{starts_at:'2026-11-19T16:00:00.000Z',email:'a@example.org,b@example.org'})).status,400,'reject multiple recipient addresses');
+// Password was changed earlier; verify private overview with the current password separately.
+const overview=await worker.fetch(new Request('https://test.example/api/admin/overview',{headers:{authorization:'Basic '+btoa('admin:'+env.ADMIN_PASSWORD)}}),env,ctx);
+assert.equal(overview.status,200);assert.ok((await overview.json()).emails.some(j=>j.booking_id===failedId&&j.status==='sent'));
+console.log('PASS: concurrent same-slot requests, single-recipient email validation and private delivery status.');
+console.log('PASS: end-to-end notification payload, queued failures/retry, persisted slot blocking, public-data privacy and protected retry.');
+const {PAYMENT_METHODS,paymentMethods,paymentInstructions}=await import('../src/payment-config.js');
+assert.deepEqual(paymentMethods(),[],'unset methods hidden');
+PAYMENT_METHODS[0].recipient='+1 512 555 0100';PAYMENT_METHODS[0].qrPath='/payments/zelle-qr.png';
+PAYMENT_METHODS[1].recipient='@test-tag';PAYMENT_METHODS[1].url='https://venmo.com/test-tag';
+assert.equal(paymentMethods().length,2);
+assert.match(paymentInstructions(5000,paymentMethods()),/Total: \$50.00/);
+assert.match(paymentInstructions(5000,paymentMethods()),/@test-tag/);
+PAYMENT_METHODS[1].url='javascript:alert(1)';PAYMENT_METHODS[0].qrPath='/payments/../../private';
+assert.equal(paymentMethods()[1].url,'');assert.equal(paymentMethods()[0].qr,'');
+for(const m of PAYMENT_METHODS){m.recipient='';m.url='';m.qrPath='';}
+console.log('PASS: Zelle/Venmo config, totals, blank defaults, unsafe URL/path rejection.');
+globalThis.fetch=originalFetch;Date.now=realNow;

@@ -1,3 +1,4 @@
+import { bookableStart, bookingWindow, HOURS_TEXT, withinHours } from './booking-rules.js?v=20261110';
 'use strict';
 const $ = id => document.getElementById(id);
 const zone = 'America/Chicago', dayMs = 86400000;
@@ -72,15 +73,9 @@ function startFor(day,time){
   const offset=12-Number(clock.format(new Date(day+'T12:00:00Z')).slice(0,2));
   return Date.parse(day+'T'+time+':00Z')+offset*3600000;
 }
-function weekendBlocked(start){
-  const day=dateKey.format(new Date(start));
-  const weekday=new Date(day+'T12:00:00Z').getUTCDay();
-  return (weekday===0||weekday===6)&&['14:00','17:30'].includes(clock.format(new Date(start)));
-}
 function available(start){
   const length=minutes();
-  if(weekendBlocked(start))return false;
-  return Number.isInteger(length)&&length>=15&&length<=360&&(live || pagesPreview) && start>=Date.now()+2*3600000 && start<=Date.now()+28*dayMs &&
+  return Number.isInteger(length)&&length>=15&&length<=360&&(live || pagesPreview) && bookableStart(start) &&
     !intervals.some(i=>start<i.end && start+length*60000>i.start);
 }
 function pick(day,time){
@@ -109,10 +104,10 @@ function renderDays(){
   $('days').replaceChildren();$('next').hidden=week>=3;
   $('fixedDuration').textContent=minutes()+' minutes';
   $('rateNote').textContent=sessionPrice(course);
-  const first=Date.parse(dateKey.format(new Date(Date.now()+2*3600000))+'T12:00:00Z');
+  const first=Date.parse(bookingWindow().first+'T12:00:00Z');
   for(let i=0;i<7*(week+1);i++){
     const date=new Date(first+i*dayMs), day=date.toISOString().slice(0,10);
-    if(day>dateKey.format(new Date(Date.now()+28*dayMs)))break;
+    if(day>bookingWindow().last)break;
     const row=document.createElement('details'); row.dataset.day=day;row.open=open ? day===open : i===0;
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
@@ -127,13 +122,13 @@ function renderDays(){
     for(let h=1;h<=12;h++)hour.add(new Option(String(h),h));
     for(let m=0;m<60;m++)minute.add(new Option(String(m).padStart(2,'0'),m));
     for(const p of ['AM','PM'])period.add(new Option(p,p));
-    hour.value='7';minute.value='30';
+    hour.value='8';minute.value='0';
     const timeRow=node('div','','custom-time-row');
     const colon=node('span',':','time-colon');colon.setAttribute('aria-hidden','true');
     timeRow.append(hour,colon,minute,period);
-    custom.append(timeRow,node('p','Choose a start time from 7:00 AM to 7:00 PM. Weekend starts at 2:00 PM and 5:30 PM are unavailable.'),button('Use time',()=>{
+    custom.append(timeRow,node('p',HOURS_TEXT),button('Use time',()=>{
       const h=Number(hour.value)%12+(period.value==='PM'?12:0),m=Number(minute.value);
-      if(h<7||h>19||(h===19&&m>0)){notice('Choose a start time from 7:00 AM to 7:00 PM.');return;}
+      if(!withinHours(startFor(day,String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')))){notice(HOURS_TEXT);return;}
       notice('');pick(day,String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
     }));
     custom.id='custom-time-'+day;
@@ -182,15 +177,22 @@ $('bookingForm').onsubmit=async e=>{
     e.target.reset();step('successStep');$('successStep').scrollIntoView({block:'start'});return;
   }
   if(!live)return;
-  if(!selected || !available(Date.parse(selected))){$('formError').textContent='Please choose a new time at least two hours from now.';$('formError').hidden=false;return;}
+  if(!selected || !available(Date.parse(selected))){$('formError').textContent='Please choose an available date at least three calendar days ahead.';$('formError').hidden=false;return;}
   if(!securityToken){$('formError').textContent='Please complete the security check before booking.';$('formError').hidden=false;return;}
   $('submitBooking').disabled=true;
   try{
     const data=await api('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),'cf-turnstile-response':securityToken,course_id:course.id,starts_at:selected,minutes:minutes(),account_required:!!window.customerAccount})});
     $('confirmationText').textContent=$('bookingSummary').textContent+' · '+data.instructions;
     $('confirmationCode').textContent='Booking reference: '+data.id;$('payment').replaceChildren();
-    if(data.paymentUrl){const link=node('a','Pay for your session','hero-link');link.href=data.paymentUrl;$('payment').append(link);}
-    if(data.qr){const img=new Image(160,160);img.src=data.qr;img.alt='Scan to pay';$('payment').append(img);}
+    for(const method of data.methods||[]){
+      const box=node('section','','payment-method');box.append(node('h3','Pay with '+method.name));
+      if(method.recipient)box.append(node('p',method.recipient,'payment-recipient'));
+      if(method.url && /^https:\/\//.test(method.url)){const link=node('a','Open '+method.name+' ↗','hero-link');link.href=method.url;link.target='_blank';link.rel='noopener noreferrer';box.append(link);}
+      if(method.qr && /^\/payments\/[\w.-]+$/.test(method.qr)){const img=new Image(200,200);img.src=method.qr;img.alt='Scan to pay with '+method.name;box.append(img);}
+      $('payment').append(box);
+    }
+    $('payment').append(node('p','Booking emails are queued for you and your instructor. Keep your booking reference until they arrive.'));
+    intervals.push({start:Date.parse(selected),end:Date.parse(selected)+minutes()*60000});
     step('successStep');e.target.reset();window.prefillAccount?.();window.dispatchEvent(new Event('booking-saved'));
   }catch(err){$('formError').textContent=err.message;$('formError').hidden=false;try{await refresh();}catch{}}
   finally{resetSecurity();$('submitBooking').disabled=false;}

@@ -1,3 +1,7 @@
+import { bookableStart, HOURS_TEXT } from '../public/booking-rules.js';
+import { paymentMethods, paymentInstructions } from './payment-config.js';
+import { ensureSetup } from './setup.js';
+import { queueEmail, deliverEmails } from './notifications.js';
 import { authRoute, currentUser } from './auth.js';
 // Cloudflare Worker: same-origin static site + JSON booking API + D1.
 const json = (value, status = 200, headers = {}) =>
@@ -15,7 +19,7 @@ const sessionSelect = `SELECT s.id, s.course_id, s.starts_at, s.ends_at, s.cance
   FROM sessions s JOIN courses c ON c.id = s.course_id`;
 
 function safeString(value, max = 100) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
-function cleanEmail(value) { const email = safeString(value, 200).toLowerCase(); return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''; }
+function cleanEmail(value) { const email = safeString(value, 200).toLowerCase(); return /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(email) ? email : ''; }
 function adminOK(request, env) {
   const auth = request.headers.get('authorization') || '';
   if (!auth.startsWith('Basic ')) return false;
@@ -58,20 +62,8 @@ async function parseJSON(request) {
 }
 function validISO(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString()===value; }
 
-async function notify(env, booking) {
-  if (!env.NOTIFY_WEBHOOK_URL || !env.NOTIFY_SHARED_SECRET) return;
-  try {
-    const res = await fetch(env.NOTIFY_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ secret: env.NOTIFY_SHARED_SECRET, studioName: env.STUDIO_NAME || 'Yoga Studio',
-        studioTimezone: env.STUDIO_TIMEZONE || 'America/Chicago', ...booking })
-    });
-    if (!res.ok || (await res.text()).trim() !== 'OK') console.error('Email notification webhook error', res.status);
-  } catch (error) { console.error('Email notification failed', String(error)); }
-}
-
 export default {
+  async scheduled(event, env, ctx) { await ensureSetup(env.DB); await deliverEmails(env); },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -89,6 +81,7 @@ export default {
       if (path === '/admin.html') return Response.redirect(new URL('/admin', request.url), 302);
       if (!path.startsWith('/api/')) return env.ASSETS.fetch(request);
       if (!env.DB) return INVALID('Database not configured.', 503);
+      await ensureSetup(env.DB);
 
       const authResponse = await authRoute(request, env, parseJSON);
       if (authResponse) return authResponse;
@@ -131,12 +124,7 @@ export default {
         if (!first || !last || !email || !/^[+\d(). -]+$/.test(phone) || phone.replace(/\D/g,'').length < 7 || d.website)
           return INVALID('Enter your name, email and phone number.');
         const start = d.starts_at;
-        if (!validISO(start) || !start.endsWith(':00.000Z') || Date.parse(start) < Date.now()+2*3600000 || Date.parse(start)>Date.now()+28*86400000) return INVALID('Choose a time between two hours and four weeks ahead.');
-        const clock = new Intl.DateTimeFormat('en-GB',{timeZone:env.STUDIO_TIMEZONE,hour:'2-digit',minute:'2-digit'}).format(new Date(start));
-        if (clock < '07:00' || clock > '19:00') return INVALID('Choose an Austin start time between 7:00 AM and 7:00 PM.');
-        const weekday=new Intl.DateTimeFormat('en-US',{timeZone:env.STUDIO_TIMEZONE,weekday:'short'}).format(new Date(start));
-        if(['Sat','Sun'].includes(weekday)&&['14:00','17:30'].includes(clock))
-          return INVALID('Weekend starts at 2:00 PM and 5:30 PM are unavailable.');
+        if (!validISO(start) || !bookableStart(Date.parse(start))) return INVALID('Choose an available date at least three calendar days ahead. '+HOURS_TEXT);
         const course = await env.DB.prepare('SELECT * FROM courses WHERE id=? AND active=1').bind(Number(d.course_id)||0).first();
         if (!course) return INVALID('Class unavailable.');
         const duration = course.duration_minutes;
@@ -172,15 +160,14 @@ export default {
             SELECT ?,s.id,?,?,?,? FROM sessions s JOIN courses c ON c.id=s.course_id
             WHERE c.active=1 AND s.course_id=? AND s.starts_at=? AND s.ends_at=? AND s.cancelled=0 AND NOT ${busy}`)
             .bind(id,first,last,email,phone,course.id,start,end,end,start),
+          queueEmail(env.DB,id,'reserved'),
           ...(customer ? [env.DB.prepare('INSERT INTO customer_bookings(booking_id,customer_id) SELECT id,? FROM bookings WHERE id=?').bind(customer.id,id)] : [])
         ]);
         if (!reservation.meta.changes) return INVALID('That time is unavailable. Choose another start time.',409);
-        const standard = duration === course.duration_minutes;
-        const paymentUrl = standard && /^https:\/\//.test(env.PAYMENT_URL || '') ? env.PAYMENT_URL : '';
-        const instructions = !standard ? 'The studio will confirm the price for your selected duration before payment.' :
-          paymentUrl ? 'Pay $'+(course.price_cents/100).toFixed(2)+' using the payment link.' : 'The studio will send you payment instructions.';
-        ctx.waitUntil(notify(env,{id,firstName:first,lastName:last,email,phone,course:course.title,startsAt:start,endsAt:end,duration,instructions,paymentUrl}));
-        return json({id,instructions,paymentUrl,qr:paymentUrl ? env.PAYMENT_QR_PATH || '' : ''},201);
+        const methods=paymentMethods(env);
+        const instructions=paymentInstructions(course.price_cents,methods);
+        ctx.waitUntil(deliverEmails(env,id));
+        return json({id,instructions,methods,emailStatus:'queued'},201);
       }
 
       // Everything below requires administrator HTTP Basic authentication.
@@ -189,17 +176,25 @@ export default {
         if (request.method !== 'GET' && !sameOrigin(request)) return INVALID('Invalid request origin.', 403);
         if (request.method === 'POST' && /^\/api\/admin\/bookings\/[a-f0-9-]+\/paid$/.test(path)) {
           const id = path.split('/')[4];
-          const paid = await env.DB.prepare(`INSERT OR IGNORE INTO payments(booking_id,paid_at)
-            SELECT b.id,datetime('now') FROM bookings b JOIN sessions s ON s.id=b.session_id
-            WHERE b.id=? AND b.status='confirmed' AND s.cancelled=0`).bind(id).run();
+          const [paid] = await env.DB.batch([
+            env.DB.prepare(`INSERT OR IGNORE INTO payments(booking_id,paid_at)
+              SELECT b.id,datetime('now') FROM bookings b JOIN sessions s ON s.id=b.session_id
+              WHERE b.id=? AND b.status='confirmed' AND s.cancelled=0`).bind(id),
+            env.DB.prepare(`INSERT OR IGNORE INTO email_jobs(id,booking_id,kind)
+              SELECT ?,booking_id,'paid' FROM payments WHERE booking_id=?`).bind(id+':paid',id)
+          ]);
           if (!paid.meta.changes) return INVALID('Already paid or inactive reservation.',409);
-          const row = await env.DB.prepare(`SELECT b.email,b.first_name,b.last_name,b.phone,s.starts_at,s.ends_at,c.title FROM bookings b
-            JOIN sessions s ON s.id=b.session_id JOIN courses c ON c.id=s.course_id WHERE b.id=?`).bind(id).first();
-          ctx.waitUntil(notify(env,{id,paid:true,firstName:row.first_name,lastName:row.last_name,phone:row.phone,duration:(Date.parse(row.ends_at)-Date.parse(row.starts_at))/60000,email:row.email,startsAt:row.starts_at,course:row.title}));
+          ctx.waitUntil(deliverEmails(env,id));
+          return json({ok:true});
+        }
+        if (request.method === 'POST' && /^\/api\/admin\/bookings\/[a-f0-9-]+\/retry-email$/.test(path)) {
+          const id=path.split('/')[4];
+          await env.DB.prepare("UPDATE email_jobs SET status='pending',attempts=0,next_attempt=0 WHERE booking_id=? AND status IN ('pending','failed') AND lease_until<=?").bind(id,Date.now()).run();
+          ctx.waitUntil(deliverEmails(env,id));
           return json({ok:true});
         }
         if (request.method === 'GET' && path === '/api/admin/overview') {
-          const [courses, sessions, bookings] = await Promise.all([
+          const [courses, sessions, bookings, emails] = await Promise.all([
             env.DB.prepare(`${courseSelect} ORDER BY id DESC`).all(),
             env.DB.prepare(`SELECT upcoming.*, EXISTS (
               SELECT 1 FROM bookings b JOIN payments p ON p.booking_id=b.id
@@ -208,10 +203,11 @@ export default {
             env.DB.prepare(`SELECT b.id, b.session_id, b.first_name, b.last_name, b.email, b.phone, b.status,
               (SELECT paid_at FROM payments WHERE booking_id=b.id) AS paid_at, b.created_at, s.starts_at, c.title AS course_title
               FROM bookings b JOIN sessions s ON s.id=b.session_id
-              JOIN courses c ON c.id=s.course_id ORDER BY b.created_at DESC LIMIT 300`).all()
+              JOIN courses c ON c.id=s.course_id ORDER BY b.created_at DESC LIMIT 300`).all(),
+            env.DB.prepare('SELECT id,booking_id,kind,status,attempts,last_error FROM email_jobs ORDER BY rowid DESC LIMIT 600').all()
           ]);
           return json({ courses: courses.results, sessions: sessions.results,
-            bookings: bookings.results });
+            bookings: bookings.results, emails: emails.results });
         }
         if (request.method === 'POST' && path === '/api/admin/courses') {
           const d = await parseJSON(request);

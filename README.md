@@ -1,6 +1,6 @@
 # Yoga by Krunali · Austin, Texas
 
-One Cloudflare Worker serves the website and booking API. D1 stores reservations. Each reservation holds the instructor's full time across all courses. The 48-hour minimum applies to the session start. Starts are offered daily from 07:00 through 19:00 Austin time. The listed USD rate applies to the listed duration. Other durations require a studio quote.
+One Cloudflare Worker serves the website and booking API. D1 stores reservations. Each reservation holds the instructor's full time across all courses, including while payment is pending. Booking opens three Austin calendar days ahead (Tuesday allows Friday morning), through 28 days ahead. Start times are 8 AM–6:30 PM weekdays and 8 AM–noon weekends. Durations are fixed: Small Group, Private, Foundation and Office Workers are 60 minutes; Group Yoga Session is 70 minutes.
 
 ## First deployment
 
@@ -19,7 +19,7 @@ Use the existing yoga-bookings database configured in wrangler.jsonc. The schema
 
 ## Studio contact and payments
 
-Set WHATSAPP_NUMBER in wrangler.jsonc to the international phone number. Set PAYMENT_URL to the HTTPS payment link. Add a QR image under public and set PAYMENT_QR_PATH to its site path (for example /payment-qr.png). Redeploy after editing. Until configured the site omits these controls. Only the standard duration shows the published payment link. Confirm the amount directly with customers choosing another duration. A payment link click leaves the booking pending. Verify receipt with the provider before using Mark paid.
+Set WHATSAPP_NUMBER in wrangler.jsonc to the international phone number. For Zelle/Venmo, edit `src/payment-config.js` and upload QR images into `public/payments/`. See [payment and email setup](PAYMENT-AND-EMAIL-SETUP.md) for exact fields and deployment steps. Verify payment manually before using Mark paid.
 
 ## Booking emails
 
@@ -30,7 +30,7 @@ npx wrangler secret put NOTIFY_WEBHOOK_URL
 npx wrangler secret put NOTIFY_SHARED_SECRET
 ```
 
-Enter the /exec URL and the matching secret respectively. Keep credentials outside GitHub. A booking triggers a studio notification and a customer reservation email with payment instructions. After verifying the transfer, open /admin → Recent reservations → Mark paid. This updates Upcoming sessions to Paid · Confirmed and triggers separate confirmation emails to both recipients. If the Apps Script web app already exists, update its deployment to a new version after replacing Code.gs. GitHub Pages is a browser-only demo and does not send mail. Delivery is best effort without retries. Make one test reservation and verify both inboxes before sharing the site.
+Enter the /exec URL and the matching secret respectively. Keep credentials outside GitHub. A booking triggers a studio notification and a customer reservation email with payment instructions. After verifying the transfer, open /admin → Recent reservations → Mark paid. This updates Upcoming sessions to Paid · Confirmed and triggers separate confirmation emails to both recipients. If the Apps Script web app already exists, update its deployment to a new version after replacing Code.gs. GitHub Pages is a browser-only demo and does not send mail. Delivery jobs are saved in D1 and retried with backoff. Admin shows delivery status and offers Retry email. Deploy the updated Apps Script for per-recipient duplicate suppression. A sent status means the mail service accepted the messages, not guaranteed inbox delivery. Make one test reservation and verify both inboxes before sharing the site.
 
 
 ## Customer signup, Google login and My sessions

@@ -7,6 +7,7 @@
  * The secret is checked on EVERY request.
  */
 function doPost(e) {
+  let lock;
   try {
     const payload = JSON.parse(e.postData.contents || '{}');
     const props = PropertiesService.getScriptProperties();
@@ -14,6 +15,20 @@ function doPost(e) {
     const admin = props.getProperty('ADMIN_EMAIL');
     if (!secret || !admin || payload.secret !== secret) {
       return ContentService.createTextOutput('Forbidden');
+    }
+    if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(String(payload.email || '')) ||
+        !/^[a-f0-9-]{36}$/.test(String(payload.id || '')) ||
+        !Number.isFinite(Date.parse(payload.startsAt)) || !Number.isFinite(payload.duration)) {
+      return ContentService.createTextOutput('ERROR');
+    }
+    const eventId = payload.id + (payload.paid ? ':paid' : ':reserved');
+    lock = LockService.getScriptLock();
+    if (!lock.tryLock(5000)) return ContentService.createTextOutput('ERROR');
+    // Keep per-recipient receipts for seven days. Retry only the recipient that failed.
+    const now = Date.now();
+    const saved = props.getProperties();
+    for (const key in saved) {
+      if (key.indexOf('sent:') === 0 && Number(saved[key]) < now - 7 * 86400000) props.deleteProperty(key);
     }
     const name = String(payload.firstName || '') + ' ' + String(payload.lastName || '');
     const course = String(payload.course || 'Yoga class');
@@ -42,16 +57,19 @@ function doPost(e) {
     ];
     // Attempt both deliveries even when one recipient fails.
     let failed = false;
-    for (const message of messages) {
-      try { MailApp.sendEmail(message); }
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      const key = 'sent:' + eventId + ':' + i;
+      if (props.getProperty(key)) continue;
+      try { MailApp.sendEmail(message); props.setProperty(key, String(now)); }
       catch (error) { failed = true; console.error('Booking email failed for reference ' + booking); }
     }
     if (failed) return ContentService.createTextOutput('ERROR');
     return ContentService.createTextOutput('OK');
   } catch (err) {
-    console.error(err);
+    console.error('Booking notification processing failed');
     return ContentService.createTextOutput('ERROR');
-  }
+  } finally { if (lock && lock.hasLock()) lock.releaseLock(); }
 }
 
 
