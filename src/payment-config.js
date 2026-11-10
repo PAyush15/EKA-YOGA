@@ -2,8 +2,8 @@
 // Upload your QR images to public/payments/, then set qrPath to '/payments/filename.png'.
 // Leave a method blank until ready. Never put account passwords or bank credentials here.
 export const PAYMENT_METHODS = [
-  { name: 'Zelle', recipient: '737-999-3999', url: '', qrPath: '/payments/zelle-qr.png' }, // recipient: your Zelle phone number or email
-  { name: 'Venmo', recipient: '@kru6196', url: '', qrPath: '/payments/venmo-qr.png' } // recipient: @your-tag; url: your full https://venmo.com/... link
+  { name: 'Zelle', recipient: '737-999-3999', url: '', qrPath: '/payments/zelle-qr.jpeg' }, // recipient: your Zelle phone number or email
+  { name: 'Venmo', recipient: '@kru6196', url: '', qrPath: '/payments/venmo-qr.jpeg' } // recipient: @your-tag; url: your full https://venmo.com/... link
 ];
 const safeURL = value => {try {const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password?u.href:'';}catch{return '';}};
 export function paymentMethods(env={}) {
