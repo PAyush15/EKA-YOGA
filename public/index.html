@@ -6,37 +6,35 @@
   <meta name="theme-color" content="#f7f6f0" />
   <meta name="description" content="Explore yoga courses and reserve your next class online." />
   <title>Book a Class • Yoga by Krunali</title>
-  <link rel="stylesheet" href="./styles.css?v=20261109-two-hour-buffer" />
+  <link rel="stylesheet" href="./styles.css?v=20261110-about" />
   <script defer src="./app.js?v=20261109-two-hour-buffer"></script>
   <script defer src="./account.js?v=20261109-two-hour-buffer"></script>
 </head>
 <body>
-  <div class="announcement">BREATHE DEEPLY. MOVE MINDFULLY. FEEL GOOD.</div>
+  <div class="announcement">Yoga doesn’t take time, it gives time.</div>
   <header class="site-header wrap">
     <a class="brand" href="/" aria-label="Home">
       <span class="brand-mark" aria-hidden="true"><img src="./yoga-logo.svg" alt="" width="48" height="53"></span>
       <span><strong id="brandName">Yoga by Krunali</strong><small>AUSTIN, TEXAS</small></span>
     </a>
-    <nav><a href="#classes">Classes</a><a href="#about">How it works</a><button id="accountLink" class="nav-admin" type="button" aria-haspopup="dialog" aria-controls="account">Sign in / Sign up</button></nav>
+    <nav><a href="#classes">Classes</a><a href="#about">About</a><button id="accountLink" class="nav-admin" type="button" aria-haspopup="dialog" aria-controls="account">Sign in / Sign up</button></nav>
   </header>
   <main>
     <section class="hero wrap">
       <div class="hero-copy">
         <div class="eyebrow"><span class="eyebrow-line"></span> YOUR PRACTICE STARTS HERE</div>
-        <h1>Bring yoga<br>to <em>your home.</em></h1>
-        <p>Roll out a mat in your favorite spot. Practice one-on-one or invite a few friends to share an at-home class in Austin.</p>
-        <!-- Instructor contact: edit the name, displayed number, and tel: link together. -->
-        <p>Your instructor is <strong>Krunali Patel</strong>. For questions about a class or how to prepare, call <a href="tel:+1 (737) 999-3999">+1 (737) 999-3999</a>.</p> 
+        <h1>Bring the practice<br>to <em>your home.</em></h1>
+
         <a class="hero-link" href="#classes">Explore classes <span>↗</span></a>
       </div>
-      <div class="hero-art">
-        <!-- Photo: Photo Genius / Unsplash -->
-        <img class="hero-photo" src="./beach-yoga.webp" alt="A group practices yoga on the beach, raising their arms in a low lunge beside the ocean." width="1400" height="933" fetchpriority="high">
-      </div>
+      <figure class="hero-figure">
+        <div class="hero-art"><img class="hero-photo" src="./cover-photo.jpeg" alt="A person stretching on a yoga mat. The photo reads: Take care of your body, it’s the only place you have to live." width="735" height="1102" fetchpriority="high"></div>
+        <figcaption>Gather your family, friends or neighbours—I’ll come to you for an in-person yoga session!</figcaption>
+      </figure>
     </section>
 
     <section class="section wrap" id="classes">
-      <div class="section-top"><div><div class="eyebrow olive">THE BOOKING STUDIO</div><h2>Your next class awaits.</h2></div><span class="section-small">Simple, mindful, and just a few clicks away.</span></div>
+      <div class="section-top"><div><h2>Your next class awaits.</h2></div><span class="section-small">The fun is just a few clicks away.</span></div>
       <div id="notice" class="notice" hidden role="status"></div>
       <div class="booking-layout">
         <aside class="course-panel">
@@ -83,7 +81,26 @@
       <div id="signedOut"><p>Create your account or log in with Google to keep your booked sessions in one place. No separate password needed.</p><div id="googleSignIn"></div><button type="button" id="retrySignIn" class="back-link" hidden>Try sign-in again</button></div>
       <div id="signedIn" hidden><p id="accountIdentity"></p><button type="button" class="back-link" id="refreshSessions">Refresh sessions</button><button type="button" class="back-link" id="logout">Log out</button><div id="mySessions" class="session-list"></div><p>Only bookings made while signed in appear here. For an earlier guest booking, contact your instructor with your booking reference.</p></div>
     </dialog>
-    <section class="footer-info" id="about"><div class="wrap footer-info-grid"><div><div class="eyebrow">A MORE MINDFUL ROUTINE</div><h2>Start where you are.<br><em>Grow from there.</em></h2></div><div><h3>What to expect</h3><p>Book a time that works for you. We’ll confirm your address before the visit. On the day, set out your mat, keep some water nearby, and leave enough room to stretch.</p></div></div></section>
+    <section class="footer-info" id="about" aria-labelledby="aboutTitle">
+      <div class="wrap about-grid">
+        <div class="about-intro">
+          <div class="eyebrow">ABOUT</div>
+          <h2 id="aboutTitle">Yoga in Your Home,<br><em>Your Comfort Zone</em></h2>
+          <p>Bring the joy of yoga into the comfort of your own home, surrounded by your loved ones and familiar faces. Enjoy a peaceful, personalized yoga experience without the need to travel or step outside your comfort zone.</p>
+          <p>Whether you practice with family, friends, or a small group, you can relax, move, stretch, and grow together in a welcoming and comfortable environment.</p>
+          <p>No crowded studios, no pressure, and no experience needed. Just you, your people, your space, and a little time to take care of yourself.</p>
+          <p><strong>Because yoga feels even better when you share it with the people you love.</strong></p>
+        </div>
+        <div class="about-details">
+          <h3>Benefits of choosing in-person yoga</h3>
+          <ul class="about-benefits"><li>No commute</li><li>No crowded studio</li><li>Your space</li><li>Your schedule</li><li>Your people</li><li>Your comfort zone</li></ul>
+          <h3>What to expect</h3>
+          <p>Book a time that works for you. We’ll confirm your address before the visit. On the day, set out your mat, keep some water and napkins nearby, and leave enough room to stretch.</p>
+          <p><strong>A little preparation goes a long way! Just bring yourself, a positive mindset, and the willingness to enjoy your practice.</strong></p>
+          <p><a class="about-contact" href="https://wa.me/17379993999" target="_blank" rel="noopener">Message me</a> if you have any questions or if you would like to schedule a session.</p>
+        </div>
+      </div>
+    </section>
   </main>
   <footer class="site-footer wrap"><span>© <span id="year"></span> <span id="footerStudio">Yoga by Krunali</span></span><span>Built for mindful moments. <a href="/admin">Admin ↗</a></span></footer>
 <a id="whatsapp" class="chat" hidden target="_blank" rel="noopener"></a>

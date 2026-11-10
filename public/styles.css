@@ -48,3 +48,19 @@ body:has(.account-dialog[open]){overflow:hidden}
 .custom-time>p{font-size:12px;line-height:1.6;color:var(--muted);max-width:440px;margin:12px 0}
 
 .custom-time-toggle{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:9px 16px;margin:2px 0 14px;border:1px solid #315742;border-radius:12px;background:#315742;color:#fff;font-size:14px;font-weight:600;cursor:pointer}.custom-time-toggle:hover{background:#223c2d}.custom-time-toggle:focus-visible{outline:3px solid #96b39b;outline-offset:3px}
+
+/* Portrait cover and About content. Keep the quote in the supplied photo visible. */
+.hero-figure{margin:0;max-width:420px;width:100%;justify-self:center;align-self:start}
+.hero-figure .hero-art{min-height:0;margin:0;border-radius:40px}
+.hero-figure .hero-photo{position:static;display:block;width:100%;height:auto;object-fit:contain}
+.hero-figure figcaption{margin:18px auto 0;max-width:390px;text-align:center;color:#68796e;font-size:15px;line-height:1.7}
+.hero-copy{align-self:center}
+.about-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:70px}
+.about-grid p{max-width:none;font-size:14px;line-height:1.85}
+.about-intro h2{margin-bottom:26px}
+.about-details h3{margin:0 0 18px}
+.about-benefits{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;margin:0 0 36px;padding-left:20px;line-height:1.6}
+.about-contact{text-decoration:underline;text-underline-offset:4px;font-weight:700}
+#about{scroll-margin-top:24px}
+@media(max-width:740px){.about-grid{grid-template-columns:1fr;gap:28px}.hero-copy{padding-top:30px}.hero-figure{max-width:380px}.site-header nav a:nth-child(2){display:inline}.announcement{padding:0 10px;text-align:center}}
+@media(max-width:420px){.brand strong{font-size:24px}.site-header{gap:10px}.site-header nav{gap:8px}.nav-admin{padding:8px}.about-benefits{gap:10px 18px}}
