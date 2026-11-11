@@ -12,7 +12,7 @@ A responsive group yoga booking website with **real D1 reservations**, a simple 
 - Optional two-way email notifications via Gmail and Apps Script
 - Default sample content, responsive design, and local-only preview mode
 
-**Not included yet:** payments, customer login, automatic reminders, waitlists, recurring-session editor, automated cancellation emails, custom domain, full GDPR compliance documentation, spam challenges, production monitoring/backup strategy. This is an MVP, not a finished payment processor.
+**Not included yet:** payments, customer login, automatic reminders, waitlists, recurring-session editor, automated cancellation emails, custom domain, full GDPR compliance documentation, spam challenges, production monitoring/backup strategy.
 
 ## Requirements / free services
 
