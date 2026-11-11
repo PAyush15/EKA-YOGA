@@ -26,5 +26,5 @@
       "*/5 * * * *"
     ]
   },
-  "keep_vars": true
+  // Keep dashboard-managed runtime variables when deploying with Wrangler.\n  "keep_vars": true
 }
