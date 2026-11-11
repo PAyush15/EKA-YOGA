@@ -18,14 +18,13 @@
   "vars": {
     "STUDIO_TIMEZONE": "America/Chicago",
     "STUDIO_NAME": "Yoga by Krunali",
-    "WHATSAPP_NUMBER": "",
-    "PAYMENT_URL": "",
-    "PAYMENT_QR_PATH": "",
+    "WHATSAPP_NUMBER": "17379993999",
     "GOOGLE_CLIENT_ID": "697565838691-9qhgb2eeulrct1m4crqnqdgm2rgls3sf.apps.googleusercontent.com"
   },
   "triggers": {
     "crons": [
       "*/5 * * * *"
     ]
-  }
+  },
+  "keep_vars": true
 }
