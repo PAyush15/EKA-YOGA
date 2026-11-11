@@ -127,11 +127,24 @@ function renderDays(){
     const timeRow=node('div','','custom-time-row');
     const colon=node('span',':','time-colon');colon.setAttribute('aria-hidden','true');
     timeRow.append(hour,colon,minute,period);
-    custom.append(timeRow,node('p',HOURS_TEXT),button('Use time',()=>{
+    const timeError=node('p','','form-error');
+    timeError.setAttribute('role','alert');
+    timeError.hidden=true;
+    custom.addEventListener('change',()=>{timeError.hidden=true;});
+    custom.append(timeRow,node('p',HOURS_TEXT),button('Use this time',()=>{
       const h=Number(hour.value)%12+(period.value==='PM'?12:0),m=Number(minute.value);
-      if(!withinHours(startFor(day,String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')))){notice(HOURS_TEXT);return;}
-      notice('');pick(day,String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'));
-    }));
+      const time=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+      const start=startFor(day,time);
+      if(!available(start)){
+        timeError.textContent=!withinHours(start)?HOURS_TEXT:
+          !live&&!pagesPreview?'Availability is still unverified. Please select the class again to refresh availability.':
+          timeLabel(time)+' is unavailable. Choose another start time.';
+        timeError.hidden=false;
+        return;
+      }
+      notice('');
+      pick(day,time);
+    }),timeError);
     custom.id='custom-time-'+day;
     const customButton=button('Choose a custom time +',()=>{
       custom.hidden=!custom.hidden;

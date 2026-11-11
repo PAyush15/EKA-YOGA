@@ -20,6 +20,25 @@ const sessionSelect = `SELECT s.id, s.course_id, s.starts_at, s.ends_at, s.cance
 
 function safeString(value, max = 100) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
 function cleanEmail(value) { const email = safeString(value, 200).toLowerCase(); return /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(email) ? email : ''; }
+const US_STATES = new Set('AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY AS GU MP PR VI'.split(' '));
+const ADDRESS_ERROR = 'Enter a US street address, city, valid state abbreviation, and ZIP code.';
+function bookingAddress(data) {
+  const street = safeString(data.address_line1,120);
+  const unit = safeString(data.address_line2,80);
+  const city = safeString(data.address_city,80);
+  const state = typeof data.address_state === 'string' ? data.address_state.trim().toUpperCase() : '';
+  const zip = typeof data.address_zip === 'string' ? data.address_zip.trim() : '';
+  if (!street || !city || !US_STATES.has(state) || !/^\d{5}(-\d{4})?$/.test(zip)) return null;
+  return [street, unit, city, state, zip];
+}
+const saveBookingAddress = (db, id, address) => db.prepare(`
+  INSERT INTO booking_addresses(booking_id,address_line1,address_line2,address_city,address_state,address_zip)
+  SELECT id,?,?,?,?,? FROM bookings WHERE id=?
+  ON CONFLICT(booking_id) DO UPDATE SET
+    address_line1=excluded.address_line1, address_line2=excluded.address_line2,
+    address_city=excluded.address_city, address_state=excluded.address_state, address_zip=excluded.address_zip
+`).bind(...address,id);
+
 function adminOK(request, env) {
   const auth = request.headers.get('authorization') || '';
   if (!auth.startsWith('Basic ')) return false;
@@ -123,6 +142,8 @@ export default {
         const email = cleanEmail(customer ? customer.email : d.email), phone = safeString(d.phone,50);
         if (!first || !last || !email || !/^[+\d(). -]+$/.test(phone) || phone.replace(/\D/g,'').length < 7 || d.website)
           return INVALID('Enter your name, email and phone number.');
+        const address = bookingAddress(d);
+        if (!address) return INVALID(ADDRESS_ERROR);
         const start = d.starts_at;
         if (!validISO(start) || !bookableStart(Date.parse(start))) return INVALID('Choose an available date at least three calendar days ahead. '+HOURS_TEXT);
         const course = await env.DB.prepare('SELECT * FROM courses WHERE id=? AND active=1').bind(Number(d.course_id)||0).first();
@@ -160,6 +181,7 @@ export default {
             SELECT ?,s.id,?,?,?,? FROM sessions s JOIN courses c ON c.id=s.course_id
             WHERE c.active=1 AND s.course_id=? AND s.starts_at=? AND s.ends_at=? AND s.cancelled=0 AND NOT ${busy}`)
             .bind(id,first,last,email,phone,course.id,start,end,end,start),
+          saveBookingAddress(env.DB,id,address),
           queueEmail(env.DB,id,'reserved'),
           ...(customer ? [env.DB.prepare('INSERT INTO customer_bookings(booking_id,customer_id) SELECT id,? FROM bookings WHERE id=?').bind(customer.id,id)] : [])
         ]);
@@ -193,6 +215,13 @@ export default {
           ctx.waitUntil(deliverEmails(env,id));
           return json({ok:true});
         }
+        if (request.method === 'PATCH' && /^\/api\/admin\/bookings\/[a-f0-9-]+\/address$/.test(path)) {
+          const address = bookingAddress(await parseJSON(request));
+          if (!address) return INVALID(ADDRESS_ERROR);
+          const result = await saveBookingAddress(env.DB,path.split('/')[4],address).run();
+          if (!result.meta.changes) return INVALID('Booking not found.',404);
+          return json({ok:true});
+        }
         if (request.method === 'GET' && path === '/api/admin/overview') {
           const [courses, sessions, bookings, emails] = await Promise.all([
             env.DB.prepare(`${courseSelect} ORDER BY id DESC`).all(),
@@ -201,9 +230,11 @@ export default {
               WHERE b.session_id=upcoming.id AND b.status='confirmed'
             ) AS paid FROM (${sessionSelect} WHERE s.starts_at >= ? ORDER BY s.starts_at LIMIT 200) upcoming ORDER BY starts_at`).bind(new Date().toISOString()).all(),
             env.DB.prepare(`SELECT b.id, b.session_id, b.first_name, b.last_name, b.email, b.phone, b.status,
+              a.address_line1, a.address_line2, a.address_city, a.address_state, a.address_zip,
               (SELECT paid_at FROM payments WHERE booking_id=b.id) AS paid_at, b.created_at, s.starts_at, c.title AS course_title
               FROM bookings b JOIN sessions s ON s.id=b.session_id
-              JOIN courses c ON c.id=s.course_id ORDER BY b.created_at DESC LIMIT 300`).all(),
+              JOIN courses c ON c.id=s.course_id
+              LEFT JOIN booking_addresses a ON a.booking_id=b.id ORDER BY b.created_at DESC LIMIT 300`).all(),
             env.DB.prepare('SELECT id,booking_id,kind,status,attempts,last_error FROM email_jobs ORDER BY rowid DESC LIMIT 600').all()
           ]);
           return json({ courses: courses.results, sessions: sessions.results,
