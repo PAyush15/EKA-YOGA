@@ -83,7 +83,8 @@ function pick(day,time){
   if(!available(start)){notice('Choose an available time.');return;}
   selected=new Date(start).toISOString();chosenDay=day;chosenTime=time;
   renderDays();
-  $('lengthBox').scrollIntoView({block:'nearest'});
+  $('continueTime').focus({preventScroll:true});
+  $('continueTime').scrollIntoView({block:'center',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
 }
 $('continueTime').onclick=async()=>{
   if(live){try{await refresh();}catch{notice('Could not verify availability. Please try again.');return;}}
