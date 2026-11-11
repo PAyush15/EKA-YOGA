@@ -179,8 +179,31 @@ async function choose(c){
 }
 $('next').onclick=()=>{const added=$('days').children.length;week=Math.min(3,week+1);renderDays();$('days').children[added]?.querySelector('summary')?.focus();};
 $('backButton').onclick=async()=>{if(live){try{await refresh();}catch{notice('Could not refresh availability.');}}step('dateStep');renderDays();};
-$('bookingForm').onsubmit=async e=>{
-  e.preventDefault();if(pagesPreview){
+const bookingForm = $('bookingForm');
+const addressError = $('addressError');
+const requiredAddressFields = ['address_line1', 'address_city', 'address_state', 'address_zip']
+  .map(name => bookingForm.elements.namedItem(name));
+
+function showAddressError() {
+  addressError.textContent = 'Enter the street address, city, two-letter state code, and ZIP code before continuing.';
+  addressError.hidden = false;
+}
+
+for (const field of requiredAddressFields) {
+  field.addEventListener('invalid', showAddressError);
+  field.addEventListener('input', () => { addressError.hidden = true; });
+}
+
+bookingForm.onsubmit=async e=>{
+  e.preventDefault();
+  const invalidAddress = requiredAddressFields.find(field => !field.value.trim() || !field.validity.valid);
+  if (invalidAddress) {
+    showAddressError();
+    invalidAddress.focus();
+    return;
+  }
+  addressError.hidden = true;
+  if(pagesPreview){
     $('resultTitle').textContent='Sample payment';
     $('confirmationText').textContent=$('bookingSummary').textContent;
     $('confirmationCode').textContent='Demo checkout · No reservation or charge.';
