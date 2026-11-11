@@ -35,7 +35,7 @@ const courses=(await (await req('/api/courses')).json()).courses;
 assert.deepEqual(courses.map(c=>[c.duration_minutes,c.price_cents]),[[60,8000],[60,5000],[60,10000],[70,8500],[60,5000]]);
 const day=new Date(Date.now()+3*86400000).toISOString().slice(0,10);
 const at=t=>day+'T'+t+':00.000Z';
-const book=(course_id,t,minutes,extra={})=>req('/api/bookings','POST',{'cf-turnstile-response':'test-token',first_name:'Austin',last_name:'Guest',phone:'+1 512 555 0123',email:'guest@example.org',course_id,starts_at:at(t),minutes,...extra});
+const book=(course_id,t,minutes,extra={})=>req('/api/bookings','POST',{'cf-turnstile-response':'test-token',first_name:'Austin',last_name:'Guest',address_line1:'100 Example St',address_city:'Austin',address_state:'TX',address_zip:'78701',phone:'+1 512 555 0123',email:'guest@example.org',course_id,starts_at:at(t),minutes,...extra});
 assert.equal((await book(1,'17:00',60,{starts_at:new Date(Date.now()+3600000).toISOString()})).status,400);
 assert.equal((await book(1,'17:00',60,{phone:''})).status,400);
 assert.equal((await book(1,'09:00',60)).status,400);
@@ -120,7 +120,7 @@ const sessionCookie=login.headers.getSetCookie().find(c=>c.startsWith('__Host-yo
 assert.equal((await customerReq('/api/auth/google','POST',{credential:valid},nonceCookie)).status,401,'nonce cannot be reused');
 assert.equal((await (await customerReq('/api/auth/me','GET',null,sessionCookie)).json()).user.email,'account@gmail.com');
 assert.equal((await (await customerReq('/api/me/bookings','GET',null,sessionCookie)).json()).bookings.length,0,'guest bookings remain private');
-const payload={'cf-turnstile-response':'test-token',first_name:'Account',last_name:'User',phone:'+1 512 555 0123',email:'different@example.com',course_id:1,starts_at:at('21:00'),minutes:60,account_required:true};
+const payload={'cf-turnstile-response':'test-token',first_name:'Account',last_name:'User',address_line1:'100 Example St',address_city:'Austin',address_state:'TX',address_zip:'78701',phone:'+1 512 555 0123',email:'different@example.com',course_id:1,starts_at:at('21:00'),minutes:60,account_required:true};
 assert.equal((await customerReq('/api/bookings','POST',payload)).status,401,'expired sign-in must not silently become guest');
 const reserved=await customerReq('/api/bookings','POST',payload,sessionCookie);
 assert.equal(reserved.status,201);

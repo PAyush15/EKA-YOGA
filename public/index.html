@@ -7,7 +7,7 @@
   <meta name="description" content="Explore yoga courses and reserve your next class online." />
   <title>Book a Class • Yoga by Krunali</title>
   <link rel="stylesheet" href="./styles.css?v=20261111-mobile" />
-  <script type="module" src="./app.js?v=20261111-scroll"></script>
+  <script type="module" src="./app.js?v=20261111-address"></script>
   <script defer src="./account.js?v=20261110-booking"></script>
 </head>
 <body>
@@ -63,6 +63,10 @@
             <p id="previewDetails" hidden>Try checkout with sample details. This demo stays in your browser.</p><form id="bookingForm" method="post">
               <div class="form-row"><label>First name <span>*</span><input name="first_name" autocomplete="given-name" required maxlength="70" /></label><label>Last name <span>*</span><input name="last_name" autocomplete="family-name" required maxlength="70" /></label></div>
               <div class="form-row"><label>Email address <span>*</span><input type="email" name="email" autocomplete="email" required maxlength="200" /></label><label>Phone / WhatsApp *<input type="tel" required name="phone" autocomplete="tel" maxlength="50" /></label></div>
+              <h4>Session address (US)</h4>
+              <div class="form-row"><label>Street address<input name="address_line1" autocomplete="address-line1" maxlength="120" required /></label><label>Apartment, suite, or unit (optional)<input name="address_line2" autocomplete="address-line2" maxlength="80" /></label></div>
+              <div class="form-row"><label>City<input name="address_city" autocomplete="address-level2" maxlength="80" required /></label><label>State (2-letter code)<input name="address_state" autocomplete="address-level1" maxlength="2" required pattern="[A-Za-z]{2}" autocapitalize="characters" placeholder="TX" /></label></div>
+              <div class="form-row"><label>ZIP code<input name="address_zip" autocomplete="postal-code" maxlength="10" required pattern="[0-9]{5}(-[0-9]{4})?" placeholder="78701" /></label></div>
               <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
               <p id="accountBookingNote">Sign in above before booking to save this session to your account, or continue as a guest.</p>
               <p class="privacy">We use your information only to manage your booking and send related messages.</p>
@@ -97,7 +101,7 @@
           <h3>What to expect</h3>
           <p>Available in North Austin and nearby neighborhoods.</p>
           <p><strong>Hours:</strong> 8:00 AM to 6:30 PM on weekdays and 8:00 AM to 12:00 PM on weekends (Austin time).</p>
-          <p>Book a time that works for you. We’ll confirm your address before the visit. On the day, set out your mat, keep some water and napkins nearby, and leave enough room to stretch.</p>
+          <p>Book a time that works for you. Enter your session address when you book. On the day, set out your mat, keep some water and napkins nearby, and leave enough room to stretch.</p>
           <p><strong>A little preparation goes a long way! Just bring yourself, a positive mindset, and the willingness to enjoy your practice.</strong></p>
           <p><a class="about-contact" href="https://wa.me/17379993999" target="_blank" rel="noopener">Message me</a> if you have any questions or if you would like to schedule a session.</p>
         </div>

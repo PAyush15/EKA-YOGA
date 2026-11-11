@@ -13,6 +13,42 @@ async function api(path,opts){
 function table(headers,rows){
   return `<table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')||`<tr><td colspan="${headers.length}">No entries yet.</td></tr>`}</tbody></table>`;
 }
+function addressCell(b) {
+  const address = b.address_line1
+    ? [b.address_line1,b.address_line2,`${b.address_city}, ${b.address_state} ${b.address_zip}`].filter(Boolean).map(esc).join('<br>')
+    : 'No address on file';
+  return `${address}<details><summary>Edit address</summary>
+    <form data-address-booking="${esc(b.id)}">
+      <label>Street address<input name="address_line1" autocomplete="address-line1" maxlength="120" required value="${esc(b.address_line1)}" /></label>
+      <label>Apartment, suite, or unit (optional)<input name="address_line2" autocomplete="address-line2" maxlength="80" value="${esc(b.address_line2)}" /></label>
+      <label>City<input name="address_city" autocomplete="address-level2" maxlength="80" required value="${esc(b.address_city)}" /></label>
+      <label>State (2-letter code)<input name="address_state" autocomplete="address-level1" maxlength="2" required pattern="[A-Za-z]{2}" autocapitalize="characters" placeholder="TX" value="${esc(b.address_state)}" /></label>
+      <label>ZIP code<input name="address_zip" autocomplete="postal-code" maxlength="10" required pattern="[0-9]{5}(-[0-9]{4})?" placeholder="78701" value="${esc(b.address_zip)}" /></label>
+      <button type="submit" class="small-button">Save address</button>
+      <p role="alert"></p>
+    </form>
+  </details>`;
+}
+$('bookingsTable').addEventListener('submit', async event => {
+  const form = event.target.closest('form[data-address-booking]');
+  if (!form) return;
+  event.preventDefault();
+  const save = form.querySelector('button[type="submit"]');
+  const error = form.querySelector('[role="alert"]');
+  error.textContent = '';
+  save.disabled = true;
+  try {
+    await api('/api/admin/bookings/'+encodeURIComponent(form.dataset.addressBooking)+'/address',{
+      method:'PATCH',body:JSON.stringify(Object.fromEntries(new FormData(form)))
+    });
+    await refresh();
+    msg('Session address saved.');
+  } catch (err) {
+    error.textContent = err.message;
+  } finally {
+    save.disabled = false;
+  }
+});
 function render(){
   // The booking calendar generates its own start times.
   if ($('courseSelect')) $('courseSelect').innerHTML=state.courses.filter(c=>c.active).map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('');
@@ -20,8 +56,8 @@ function render(){
     `<tr><td>${esc(c.title)}</td><td>${c.duration_minutes} min</td><td>${c.capacity}</td><td>$${(c.price_cents/100).toFixed(2)}</td><td><span class="badge ${c.active?'':'off'}">${c.active?'Published':'Hidden'}</span></td><td><button class="small-button" data-course="${c.id}" data-active="${c.active?'false':'true'}">${c.active?'Hide':'Publish'}</button></td></tr>`));
   $('sessionsTable').innerHTML=table(['Course','Date and time (Austin)','Reserved','Status','Action'],state.sessions.map(s=>
     `<tr><td>${esc(s.course_title)}</td><td>${esc(displayDate(s.starts_at))}</td><td>${s.reserved} / ${s.capacity}</td><td><span class="badge ${s.cancelled?'off':''}">${s.cancelled?'Cancelled':!s.reserved?'Open':s.paid?'Paid · Confirmed':'Reserved · Payment pending'}</span></td><td>${s.cancelled?'—':`<button class="small-button danger" data-session="${s.id}">Cancel session</button>`}</td></tr>`));
-  $('bookingsTable').innerHTML=table(['Customer','Class / date','Email','Phone','Status','Email delivery','Action'],state.bookings.map(b=>
-    `<tr><td>${esc(b.first_name+' '+b.last_name)}</td><td>${esc(b.course_title)}<br>${esc(displayDate(b.starts_at))}</td><td>${esc(b.email)}</td><td>${esc(b.phone)}</td><td><span class="badge ${b.status==='cancelled'?'off':''}">${b.status==='cancelled'?'Cancelled':b.paid_at?'Paid':'Payment pending'}</span></td><td>${(state.emails||[]).filter(j=>j.booking_id===b.id).map(j=>esc(j.kind+': '+j.status+(j.last_error?' ('+j.last_error+')':''))).join('<br>')||'No delivery record'}${(state.emails||[]).some(j=>j.booking_id===b.id&&['pending','failed'].includes(j.status))?'<button class="small-button" data-retry-email="'+esc(b.id)+'">Retry email</button>':''}</td><td>${b.status==='cancelled'?'—':`${b.paid_at?'':'<button class="small-button" data-paid="'+esc(b.id)+'">Mark paid</button>'}<button class="small-button danger" data-booking="${esc(b.id)}">Cancel</button>`}</td></tr>`));
+  $('bookingsTable').innerHTML=table(['Customer','Class / date','Email','Phone','Session address','Status','Email delivery','Action'],state.bookings.map(b=>
+    `<tr><td>${esc(b.first_name+' '+b.last_name)}</td><td>${esc(b.course_title)}<br>${esc(displayDate(b.starts_at))}</td><td>${esc(b.email)}</td><td>${esc(b.phone)}</td><td>${addressCell(b)}</td><td><span class="badge ${b.status==='cancelled'?'off':''}">${b.status==='cancelled'?'Cancelled':b.paid_at?'Paid':'Payment pending'}</span></td><td>${(state.emails||[]).filter(j=>j.booking_id===b.id).map(j=>esc(j.kind+': '+j.status+(j.last_error?' ('+j.last_error+')':''))).join('<br>')||'No delivery record'}${(state.emails||[]).some(j=>j.booking_id===b.id&&['pending','failed'].includes(j.status))?'<button class="small-button" data-retry-email="'+esc(b.id)+'">Retry email</button>':''}</td><td>${b.status==='cancelled'?'—':`${b.paid_at?'':'<button class="small-button" data-paid="'+esc(b.id)+'">Mark paid</button>'}<button class="small-button danger" data-booking="${esc(b.id)}">Cancel</button>`}</td></tr>`));
 }
 async function refresh(){state=await api('/api/admin/overview');render();}
 $('courseForm').addEventListener('submit',async e=>{

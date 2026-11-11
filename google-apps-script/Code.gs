@@ -45,7 +45,7 @@ function doPost(e) {
         to: String(payload.email), replyTo: admin,
         subject: (payload.paid ? 'Your yoga session is confirmed' : 'Your yoga session is reserved — payment pending') + ' | ' + studio,
         body: 'Hi ' + payload.firstName + ',\n\n' + customerBody + '\n\n' + details +
-          '\n\nPlease reply with the address for your session if you haven’t already shared it.\n' + studio
+          '\n\n' + studio
       },
       {
         to: admin,
