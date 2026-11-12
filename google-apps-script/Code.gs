@@ -8,27 +8,31 @@
  */
 function doPost(e) {
   let lock;
+  let structured = false;
+  const respond = (result, legacy) => structured
+    ? ContentService.createTextOutput(JSON.stringify({version: 2, ...result})).setMimeType(ContentService.MimeType.JSON)
+    : ContentService.createTextOutput(legacy);
   try {
     const payload = JSON.parse(e.postData.contents || '{}');
+    structured = payload.reportVersion === 2;
     const props = PropertiesService.getScriptProperties();
     const secret = props.getProperty('NOTIFY_SHARED_SECRET');
     const admin = props.getProperty('ADMIN_EMAIL');
-    if (!secret || !admin || payload.secret !== secret) {
-      return ContentService.createTextOutput('Forbidden');
-    }
+    if (!secret || payload.secret !== secret) return respond({error: 'config'}, 'Forbidden');
+    if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(admin || '')) return respond({error: 'config'}, 'Forbidden');
     if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(String(payload.email || '')) ||
         !/^[a-f0-9-]{36}$/.test(String(payload.id || '')) ||
         !Number.isFinite(Date.parse(payload.startsAt)) || !Number.isFinite(payload.duration)) {
-      return ContentService.createTextOutput('ERROR');
+      return respond({error: 'invalid'}, 'ERROR');
     }
     const eventId = payload.id + (payload.paid ? ':paid' : ':reserved');
     lock = LockService.getScriptLock();
-    if (!lock.tryLock(5000)) return ContentService.createTextOutput('ERROR');
+    if (!lock.tryLock(5000)) return respond({error: 'busy'}, 'ERROR');
     // Keep per-recipient receipts for seven days. Retry only the recipient that failed.
     const now = Date.now();
     const saved = props.getProperties();
     for (const key in saved) {
-      if (key.indexOf('sent:') === 0 && Number(saved[key]) < now - 7 * 86400000) props.deleteProperty(key);
+      if (key.indexOf('sent:') === 0 && Number(String(saved[key]).replace(/^sending:/, '')) < now - 7 * 86400000) props.deleteProperty(key);
     }
     const name = String(payload.firstName || '') + ' ' + String(payload.lastName || '');
     const course = String(payload.course || 'Yoga class');
@@ -55,21 +59,30 @@ function doPost(e) {
           '\n\n' + details + '\nEmail: ' + payload.email + '\nPhone / WhatsApp: ' + (payload.phone || 'Not provided')
       }
     ];
-    // Attempt both deliveries even when one recipient fails.
-    let failed = false;
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i];
+    const results = messages.map((message, i) => {
+      // Keep the same keys as the previous deployment so retries recognize its receipts.
       const key = 'sent:' + eventId + ':' + i;
-      if (props.getProperty(key)) continue;
-      try { MailApp.sendEmail(message); props.setProperty(key, String(now)); }
-      catch (error) { failed = true; console.error('Booking email failed for reference ' + booking); }
-    }
-    if (failed) return ContentService.createTextOutput('ERROR');
-    return ContentService.createTextOutput('OK');
+      const receipt = props.getProperty(key);
+      if (receipt) return String(receipt).startsWith('sending:') ? 'review' : 'accepted';
+      if (MailApp.getRemainingDailyQuota() < 1) return 'quota';
+
+      // If execution stops between sending and saving the receipt, do not blindly resend.
+      props.setProperty(key, 'sending:' + now);
+      try {
+        MailApp.sendEmail(message);
+      } catch (error) {
+        props.deleteProperty(key);
+        console.error('Booking email failed for reference ' + booking + ', recipient ' + i);
+        return 'failed';
+      }
+      props.setProperty(key, String(now));
+      return 'accepted';
+    });
+    return respond({customer: results[0], instructor: results[1]},
+      results.every(status => status === 'accepted') ? 'OK' : 'ERROR');
   } catch (err) {
     console.error('Booking notification processing failed');
-    return ContentService.createTextOutput('ERROR');
+    return respond({error: 'service'}, 'ERROR');
   } finally { if (lock && lock.hasLock()) lock.releaseLock(); }
 }
-
 

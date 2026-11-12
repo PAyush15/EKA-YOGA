@@ -186,7 +186,7 @@ console.log('PASS: three Austin calendar days, earliest morning, midnight rollov
 const vm=await import('node:vm');
 const sent=[];
 const props={NOTIFY_SHARED_SECRET:'test-secret',ADMIN_EMAIL:'owner@example.org'};
-const context={PropertiesService:{getScriptProperties:()=>({getProperty:key=>props[key],getProperties:()=>({...props}),setProperty:(k,v)=>props[k]=v,deleteProperty:k=>delete props[k]})},LockService:{getScriptLock:()=>({tryLock:()=>true,hasLock:()=>true,releaseLock:()=>{}})},Utilities:{formatDate:()=> 'Mon, Nov 16, 1:00 PM CST'},MailApp:{sendEmail:message=>sent.push(message)},ContentService:{createTextOutput:text=>text},console};
+const context={PropertiesService:{getScriptProperties:()=>({getProperty:key=>props[key],getProperties:()=>({...props}),setProperty:(k,v)=>props[k]=v,deleteProperty:k=>delete props[k]})},LockService:{getScriptLock:()=>({tryLock:()=>true,hasLock:()=>true,releaseLock:()=>{}})},Utilities:{formatDate:()=> 'Mon, Nov 16, 1:00 PM CST'},MailApp:{getRemainingDailyQuota:()=>100,sendEmail:message=>sent.push(message)},ContentService:{MimeType:{JSON:'application/json'},createTextOutput:text=>text.startsWith('{')?{setMimeType:()=>text}:text},console};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('google-apps-script/Code.gs','utf8'),context);
 const notification={secret:'test-secret',id:'11111111-1111-4111-8111-111111111111',firstName:'Test',lastName:'Customer',email:'customer@example.org',phone:'+1 512 555 0123',course:'Private yoga',startsAt:'2026-11-16T19:00:00.000Z',duration:60,instructions:'Payment pending'};
@@ -213,6 +213,26 @@ assert.equal(context.doPost({postData:{contents:JSON.stringify(second)}}),'OK');
 assert.deepEqual(sent.map(m=>m.to),['customer@example.org'],'retry only failed recipient');
 console.log('PASS: pending/paid email content, duplicate suppression, partial failure and per-recipient retry.');
 
+// Structured reporting keeps old receipts and avoids a second send when a receipt write fails.
+const report = payload => JSON.parse(context.doPost({postData:{contents:JSON.stringify({...payload,reportVersion:2})}}));
+sent.length=0;
+assert.deepEqual(report(second),{version:2,customer:'accepted',instructor:'accepted'});
+assert.equal(sent.length,0);
+const uncertain={...notification,id:'33333333-3333-4333-8333-333333333333'};
+const properties=context.PropertiesService.getScriptProperties;
+context.PropertiesService.getScriptProperties=()=>{
+  const store=properties(), save=store.setProperty;
+  return {...store,setProperty:(key,value)=>{
+    if(key.endsWith(':0')&&!String(value).startsWith('sending:'))throw Error('receipt storage failure');
+    save(key,value);
+  }};
+};
+assert.equal(report(uncertain).error,'service');
+context.PropertiesService.getScriptProperties=properties;
+assert.deepEqual(report(uncertain),{version:2,customer:'review',instructor:'accepted'});
+assert.deepEqual(sent.map(m=>m.to),['customer@example.org','owner@example.org']);
+console.log('PASS: ambiguous send requires review and does not replay the customer message.');
+
 const {deliverEmails}=await import('../src/notifications.js');
 env.NOTIFY_WEBHOOK_URL='https://script.google.com/macros/s/test/exec';env.NOTIFY_SHARED_SECRET='test-secret';
 // Exercise actual Worker -> webhook payload -> Apps Script handler; all email delivery is mocked.
@@ -228,6 +248,7 @@ assert.equal(liveBook.status,201);const liveId=(await liveBook.json()).id;
 assert.equal(webhookPayloads.at(-1).startsAt,'2026-11-16T16:00:00.000Z');
 assert.equal(webhookPayloads.at(-1).duration,60);
 assert.equal(sqlite.prepare('SELECT status FROM email_jobs WHERE booking_id=?').get(liveId).status,'sent');
+assert.equal(sqlite.prepare('SELECT customer_status FROM email_job_progress WHERE job_id=?').get(liveId+':reserved').customer_status,'accepted');
 const busy=(await (await req('/api/busy')).json()).intervals;
 assert.ok(busy.some(i=>i.starts_at==='2026-11-16T16:00:00.000Z'&&i.ends_at==='2026-11-16T17:00:00.000Z'));
 assert.ok(busy.every(i=>Object.keys(i).sort().join(',')==='ends_at,starts_at'),'no customer data in public availability');
@@ -243,6 +264,37 @@ sqlite.prepare('UPDATE email_jobs SET next_attempt=0 WHERE booking_id=?').run(fa
 await deliverEmails(env,failedId);
 assert.equal(sqlite.prepare('SELECT status FROM email_jobs WHERE booking_id=?').get(failedId).status,'sent');
 assert.equal((await req('/api/admin/bookings/'+failedId+'/retry-email','POST',{})).status,401);
+// Google quota exhaustion can leave only one recipient accepted.
+context.MailApp.getRemainingDailyQuota=()=>Number(sent.length===0);
+sent.length=0;
+globalThis.fetch=async(url,options)=>String(url).includes('/turnstile/')
+  ? Response.json(verification)
+  : new Response(context.doPost({postData:{contents:options.body}}));
+const quotaBooking=await book(1,'18:00',60,{starts_at:'2026-11-17T18:00:00.000Z'});
+assert.equal(quotaBooking.status,201);
+const quotaId=(await quotaBooking.json()).id;
+const getJob=sqlite.prepare('SELECT * FROM email_jobs WHERE id=?');
+const getProgress=sqlite.prepare('SELECT * FROM email_job_progress WHERE job_id=?');
+assert.equal(getProgress.get(quotaId+':reserved').customer_status,'accepted');
+assert.equal(getProgress.get(quotaId+':reserved').instructor_status,'quota');
+sqlite.prepare('UPDATE email_jobs SET attempts=7,next_attempt=0 WHERE id=?').run(quotaId+':reserved');
+await deliverEmails(env,quotaId);
+assert.equal(getJob.get(quotaId+':reserved').status,'pending');
+assert.equal(sent.length,1);
+
+const markPaid=new Request('https://test.example/api/admin/bookings/'+quotaId+'/paid',{
+  method:'POST',headers:{authorization:'Basic '+btoa('admin:'+env.ADMIN_PASSWORD)}
+});
+context.MailApp.getRemainingDailyQuota=()=>100;
+assert.equal((await worker.fetch(markPaid,env,ctx)).status,200);
+await drain();
+assert.equal(getJob.get(quotaId+':paid').status,'sent');
+assert.equal(getJob.get(quotaId+':reserved').status,'skipped');
+assert.match(getJob.get(quotaId+':reserved').last_error,/Payment recorded/);
+assert.equal(getProgress.get(quotaId+':reserved').customer_status,'accepted');
+assert.equal(sent.length,3,'send only the two confirmations once payment is recorded');
+console.log('PASS: partial quota status, extended retries, and Mark paid skips the outstanding reservation request.');
+
 const simultaneous=await Promise.all([1,3,4].map(course_id=>book(course_id,'16:00',course_id===4?70:60,{starts_at:'2026-11-18T16:00:00.000Z'})));
 assert.deepEqual(simultaneous.map(r=>r.status).sort(),[201,409,409],'only one concurrent request reserves an interval');
 assert.equal((await book(1,'16:00',60,{starts_at:'2026-11-19T16:00:00.000Z',email:'a@example.org,b@example.org'})).status,400,'reject multiple recipient addresses');
@@ -252,6 +304,7 @@ assert.equal(overview.status,200);assert.ok((await overview.json()).emails.some(
 console.log('PASS: concurrent same-slot requests, single-recipient email validation and private delivery status.');
 console.log('PASS: end-to-end notification payload, queued failures/retry, persisted slot blocking, public-data privacy and protected retry.');
 const {PAYMENT_METHODS,paymentMethods,paymentInstructions}=await import('../src/payment-config.js');
+for(const method of PAYMENT_METHODS){method.recipient='';method.url='';method.qrPath='';}
 assert.deepEqual(paymentMethods(),[],'unset methods hidden');
 PAYMENT_METHODS[0].recipient='+1 512 555 0100';PAYMENT_METHODS[0].qrPath='/payments/zelle-qr.png';
 PAYMENT_METHODS[1].recipient='@test-tag';PAYMENT_METHODS[1].url='https://venmo.com/test-tag';

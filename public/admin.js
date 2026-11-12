@@ -49,6 +49,33 @@ $('bookingsTable').addEventListener('submit', async event => {
     save.disabled = false;
   }
 });
+function emailCell(booking) {
+  const jobs = (state.emails || []).filter(job => job.booking_id === booking.id);
+  const jobLabels = {
+    pending: 'Queued', sent: 'Accepted by Google', failed: 'Retry needed',
+    skipped: 'Skipped', review: 'Needs review'
+  };
+  const recipientLabels = {
+    accepted: 'Accepted by Google', quota: 'Waiting for Google quota', failed: 'Send failed',
+    review: 'Send outcome unconfirmed'
+  };
+  const details = jobs.map(job => {
+    const lines = [
+      (job.kind === 'paid' ? 'Payment confirmation' : 'Reservation') + ' · ' + (jobLabels[job.status] || job.status)
+    ];
+    if (job.customer_status) lines.push('Customer · ' + recipientLabels[job.customer_status]);
+    if (job.instructor_status) lines.push('Instructor · ' + recipientLabels[job.instructor_status]);
+    if (job.last_error) lines.push(job.last_error);
+    if (job.status === 'pending' && job.next_attempt > Date.now()) {
+      lines.push('Next attempt · ' + displayDate(job.next_attempt));
+    }
+    return lines.map(esc).join('<br>');
+  });
+  if (jobs.some(job => ['pending', 'failed'].includes(job.status))) {
+    details.push('<button class="small-button" data-retry-email="' + esc(booking.id) + '">Retry email</button>');
+  }
+  return details.join('<br><br>') || 'No email record';
+}
 function render(){
   // The booking calendar generates its own start times.
   if ($('courseSelect')) $('courseSelect').innerHTML=state.courses.filter(c=>c.active).map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('');
@@ -57,7 +84,7 @@ function render(){
   $('sessionsTable').innerHTML=table(['Course','Date and time (Austin)','Reserved','Status','Action'],state.sessions.map(s=>
     `<tr><td>${esc(s.course_title)}</td><td>${esc(displayDate(s.starts_at))}</td><td>${s.reserved} / ${s.capacity}</td><td><span class="badge ${s.cancelled?'off':''}">${s.cancelled?'Cancelled':!s.reserved?'Open':s.paid?'Paid · Confirmed':'Reserved · Payment pending'}</span></td><td>${s.cancelled?'—':`<button class="small-button danger" data-session="${s.id}">Cancel session</button>`}</td></tr>`));
   $('bookingsTable').innerHTML=table(['Customer','Class / date','Email','Phone','Session address','Status','Email delivery','Action'],state.bookings.map(b=>
-    `<tr><td>${esc(b.first_name+' '+b.last_name)}</td><td>${esc(b.course_title)}<br>${esc(displayDate(b.starts_at))}</td><td>${esc(b.email)}</td><td>${esc(b.phone)}</td><td>${addressCell(b)}</td><td><span class="badge ${b.status==='cancelled'?'off':''}">${b.status==='cancelled'?'Cancelled':b.paid_at?'Paid':'Payment pending'}</span></td><td>${(state.emails||[]).filter(j=>j.booking_id===b.id).map(j=>esc(j.kind+': '+j.status+(j.last_error?' ('+j.last_error+')':''))).join('<br>')||'No delivery record'}${(state.emails||[]).some(j=>j.booking_id===b.id&&['pending','failed'].includes(j.status))?'<button class="small-button" data-retry-email="'+esc(b.id)+'">Retry email</button>':''}</td><td>${b.status==='cancelled'?'—':`${b.paid_at?'':'<button class="small-button" data-paid="'+esc(b.id)+'">Mark paid</button>'}<button class="small-button danger" data-booking="${esc(b.id)}">Cancel</button>`}</td></tr>`));
+    `<tr><td>${esc(b.first_name+' '+b.last_name)}</td><td>${esc(b.course_title)}<br>${esc(displayDate(b.starts_at))}</td><td>${esc(b.email)}</td><td>${esc(b.phone)}</td><td>${addressCell(b)}</td><td><span class="badge ${b.status==='cancelled'?'off':''}">${b.status==='cancelled'?'Cancelled':b.paid_at?'Paid':'Payment pending'}</span></td><td>${emailCell(b)}</td><td>${b.status==='cancelled'?'—':`${b.paid_at?'':'<button class="small-button" data-paid="'+esc(b.id)+'">Mark paid</button>'}<button class="small-button danger" data-booking="${esc(b.id)}">Cancel</button>`}</td></tr>`));
 }
 async function refresh(){state=await api('/api/admin/overview');render();}
 $('courseForm').addEventListener('submit',async e=>{

@@ -86,3 +86,10 @@ CREATE TABLE IF NOT EXISTS email_jobs (
   last_error TEXT,
   UNIQUE(booking_id,kind)
 );
+
+CREATE TABLE IF NOT EXISTS email_job_progress (
+      job_id TEXT PRIMARY KEY REFERENCES email_jobs(id),
+      first_attempt_at INTEGER NOT NULL,
+      customer_status TEXT,
+      instructor_status TEXT
+    );
