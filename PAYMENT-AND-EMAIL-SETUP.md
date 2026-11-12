@@ -1,3 +1,5 @@
+> **Current email setup:** Booking emails now use Resend. Follow [RESEND-SETUP.md](RESEND-SETUP.md) for required Cloudflare settings, delivery tracking and testing. Apps Script instructions below are retained only for legacy reference.
+
 # Payment details
 
 Edit `src/payment-config.js` in GitHub. Replace the empty quoted values for each method:
@@ -46,3 +48,4 @@ All rules use Austin's `America/Chicago` timezone, including daylight saving cha
 # Validation performed
 
 `node --experimental-sqlite tests/smoke.mjs` tests the real Worker against SQLite with mock Google/Turnstile/email services: calendar boundaries, DST, permitted hours, fixed durations, concurrent overlaps, pending-payment blocking, private availability, Google account ownership, invalid requests, notification payloads, retry handling, and Apps Script recipient/deduplication logic. It does not prove delivery by the deployed Gmail account. The external Apps Script deployment and private inboxes require the live check above.
+
