@@ -86,3 +86,14 @@ CREATE TABLE IF NOT EXISTS email_jobs (
   last_error TEXT,
   UNIQUE(booking_id,kind)
 );
+
+
+CREATE TABLE IF NOT EXISTS email_deliveries (
+  id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES email_jobs(id), recipient TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt INTEGER NOT NULL DEFAULT 0, first_attempt INTEGER,
+  provider_id TEXT UNIQUE, accepted_at TEXT, last_error TEXT, payload TEXT,
+  UNIQUE(job_id,recipient));
+CREATE TABLE IF NOT EXISTS email_events (
+  id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, type TEXT NOT NULL, occurred_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS email_events_provider ON email_events(provider_id,occurred_at);

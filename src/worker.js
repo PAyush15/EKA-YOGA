@@ -1,7 +1,8 @@
+import { resendWebhook } from './resend.js';
 import { bookableStart, HOURS_TEXT } from '../public/booking-rules.js';
 import { paymentMethods, paymentInstructions } from './payment-config.js';
 import { ensureSetup } from './setup.js';
-import { queueEmail, deliverEmails } from './notifications.js';
+import { queueEmail, deliverEmails, retryEmails, emailSettings } from './notifications.js';
 import { authRoute, currentUser } from './auth.js';
 // Cloudflare Worker: same-origin static site + JSON booking API + D1.
 const json = (value, status = 200, headers = {}) =>
@@ -101,6 +102,11 @@ export default {
       if (!path.startsWith('/api/')) return env.ASSETS.fetch(request);
       if (!env.DB) return INVALID('Database not configured.', 503);
       await ensureSetup(env.DB);
+
+      if(path==='/api/webhooks/resend') {
+        if(request.method!=='POST')return new Response('Method not allowed',{status:405});
+        return await resendWebhook(request,env);
+      }
 
       const authResponse = await authRoute(request, env, parseJSON);
       if (authResponse) return authResponse;
@@ -211,7 +217,7 @@ export default {
         }
         if (request.method === 'POST' && /^\/api\/admin\/bookings\/[a-f0-9-]+\/retry-email$/.test(path)) {
           const id=path.split('/')[4];
-          await env.DB.prepare("UPDATE email_jobs SET status='pending',attempts=0,next_attempt=0 WHERE booking_id=? AND status IN ('pending','failed') AND lease_until<=?").bind(id,Date.now()).run();
+          await retryEmails(env.DB,id);
           ctx.waitUntil(deliverEmails(env,id));
           return json({ok:true});
         }
@@ -223,7 +229,7 @@ export default {
           return json({ok:true});
         }
         if (request.method === 'GET' && path === '/api/admin/overview') {
-          const [courses, sessions, bookings, emails] = await Promise.all([
+          const [courses, sessions, bookings, emails, deliveries] = await Promise.all([
             env.DB.prepare(`${courseSelect} ORDER BY id DESC`).all(),
             env.DB.prepare(`SELECT upcoming.*, EXISTS (
               SELECT 1 FROM bookings b JOIN payments p ON p.booking_id=b.id
@@ -235,10 +241,17 @@ export default {
               FROM bookings b JOIN sessions s ON s.id=b.session_id
               JOIN courses c ON c.id=s.course_id
               LEFT JOIN booking_addresses a ON a.booking_id=b.id ORDER BY b.created_at DESC LIMIT 300`).all(),
-            env.DB.prepare('SELECT id,booking_id,kind,status,attempts,last_error FROM email_jobs ORDER BY rowid DESC LIMIT 600').all()
+            env.DB.prepare('SELECT id,booking_id,kind,status,attempts,last_error FROM email_jobs ORDER BY rowid DESC LIMIT 600').all(),
+            env.DB.prepare(`SELECT d.id,d.job_id,d.recipient,d.status,d.attempts,d.next_attempt,d.accepted_at,d.provider_id,d.last_error,
+              (SELECT e.type FROM email_events e WHERE e.provider_id=d.provider_id
+                ORDER BY CASE e.type WHEN 'email.complained' THEN 5 WHEN 'email.bounced' THEN 4
+                  WHEN 'email.failed' THEN 4 WHEN 'email.suppressed' THEN 4 WHEN 'email.delivered' THEN 3
+                  WHEN 'email.delivery_delayed' THEN 2 ELSE 1 END DESC,e.occurred_at DESC LIMIT 1) AS delivery_event
+              FROM email_deliveries d JOIN email_jobs j ON j.id=d.job_id
+              WHERE j.id IN (SELECT id FROM email_jobs ORDER BY rowid DESC LIMIT 600)`).all()
           ]);
           return json({ courses: courses.results, sessions: sessions.results,
-            bookings: bookings.results, emails: emails.results });
+            bookings: bookings.results, emails: emails.results, deliveries: deliveries.results, emailConfig: {error:emailSettings(env),webhookConfigured:!!env.RESEND_WEBHOOK_SECRET} });
         }
         if (request.method === 'POST' && path === '/api/admin/courses') {
           const d = await parseJSON(request);
@@ -301,6 +314,7 @@ export default {
     }
   }
 };
+
 
 
 

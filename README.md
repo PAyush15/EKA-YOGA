@@ -1,3 +1,5 @@
+> **Current email setup:** Booking emails now use Resend. Follow [RESEND-SETUP.md](RESEND-SETUP.md) for required Cloudflare settings, delivery tracking and testing. Apps Script instructions below are retained only for legacy reference.
+
 # Yoga by Krunali · Austin, Texas
 
 One Cloudflare Worker serves the website and booking API. D1 stores reservations. Each reservation holds the instructor's full time across all courses, including while payment is pending. Booking opens three Austin calendar days ahead (Tuesday allows Friday morning), through 28 days ahead. Start times are 8 AM–6:30 PM weekdays and 8 AM–noon weekends. Durations are fixed: Small Group, Private, Foundation and Office Workers are 60 minutes; Group Yoga Session is 70 minutes.
@@ -61,3 +63,4 @@ Official Google setup reference: https://developers.google.com/identity/gsi/web/
 The Worker verifies Google's RSA signature, issuer, audience, expiry, verified email and a one-use nonce. Accounts use Google's stable subject ID. Browser sessions last seven days and use random opaque tokens in Secure, HttpOnly, SameSite cookies; only token hashes are stored in D1. No Google tokens are saved in browser storage. Every customer session query is scoped to the authenticated account; typing another email cannot grant access. Login/logout require same-origin JSON requests. Private API responses are not cached.
 
 Run `node --experimental-sqlite tests/smoke.mjs` for booking and auth checks. Auth tests sign real RSA test credentials and mock only Google's public-key endpoint; an actual Google account login still needs the client configuration and live HTTPS deployment above.
+

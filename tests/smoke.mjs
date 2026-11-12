@@ -213,45 +213,33 @@ assert.equal(context.doPost({postData:{contents:JSON.stringify(second)}}),'OK');
 assert.deepEqual(sent.map(m=>m.to),['customer@example.org'],'retry only failed recipient');
 console.log('PASS: pending/paid email content, duplicate suppression, partial failure and per-recipient retry.');
 
-const {deliverEmails}=await import('../src/notifications.js');
-env.NOTIFY_WEBHOOK_URL='https://script.google.com/macros/s/test/exec';env.NOTIFY_SHARED_SECRET='test-secret';
-// Exercise actual Worker -> webhook payload -> Apps Script handler; all email delivery is mocked.
-const webhookPayloads=[];
+// Resend integration, queue, signed webhook and migration cases live in resend.mjs.
+// Exercise the real booking and paid routes with a mocked Resend API.
+env.RESEND_API_KEY='test-key';env.EMAIL_FROM='bookings@example.org';env.ADMIN_EMAIL='owner@example.org';
+const resendCalls=[];
 globalThis.fetch=async(url,options)=>{
  if(String(url).includes('/turnstile/'))return Response.json(verification);
- assert.equal(String(url),env.NOTIFY_WEBHOOK_URL);
- const payload=JSON.parse(options.body);webhookPayloads.push(payload);
- return new Response(context.doPost({postData:{contents:options.body}}));
+ assert.equal(String(url),'https://api.resend.com/emails');resendCalls.push(JSON.parse(options.body));
+ return Response.json({id:crypto.randomUUID()});
 };
 const liveBook=await book(1,'16:00',60,{starts_at:'2026-11-16T16:00:00.000Z'});
 assert.equal(liveBook.status,201);const liveId=(await liveBook.json()).id;
-assert.equal(webhookPayloads.at(-1).startsAt,'2026-11-16T16:00:00.000Z');
-assert.equal(webhookPayloads.at(-1).duration,60);
-assert.equal(sqlite.prepare('SELECT status FROM email_jobs WHERE booking_id=?').get(liveId).status,'sent');
+assert.equal(resendCalls.length,2);assert.match(resendCalls[0].text,/100 Example St/);
 const busy=(await (await req('/api/busy')).json()).intervals;
 assert.ok(busy.some(i=>i.starts_at==='2026-11-16T16:00:00.000Z'&&i.ends_at==='2026-11-16T17:00:00.000Z'));
-assert.ok(busy.every(i=>Object.keys(i).sort().join(',')==='ends_at,starts_at'),'no customer data in public availability');
+assert.ok(busy.every(i=>Object.keys(i).sort().join(',')==='ends_at,starts_at'));
 assert.equal((await book(4,'16:00',70,{starts_at:'2026-11-16T16:30:00.000Z'})).status,409);
-assert.equal(webhookPayloads.length,1,'no email for rejected overlap');
-globalThis.fetch=async(url,options)=>String(url).includes('/turnstile/')?Response.json(verification):new Response('ERROR');
-const failedBook=await book(1,'16:00',60,{starts_at:'2026-11-17T16:00:00.000Z'});
-assert.equal(failedBook.status,201);const failedId=(await failedBook.json()).id;
-assert.equal(sqlite.prepare('SELECT status FROM email_jobs WHERE booking_id=?').get(failedId).status,'pending');
-assert.equal((await book(1,'16:00',60,{starts_at:'2026-11-17T16:00:00.000Z'})).status,409,'mail failure does not release reservation');
-globalThis.fetch=async(url)=>String(url).includes('/turnstile/')?Response.json(verification):new Response('OK');
-sqlite.prepare('UPDATE email_jobs SET next_attempt=0 WHERE booking_id=?').run(failedId);
-await deliverEmails(env,failedId);
-assert.equal(sqlite.prepare('SELECT status FROM email_jobs WHERE booking_id=?').get(failedId).status,'sent');
-assert.equal((await req('/api/admin/bookings/'+failedId+'/retry-email','POST',{})).status,401);
+assert.equal(resendCalls.length,2);
+const paidRequest=new Request('https://test.example/api/admin/bookings/'+liveId+'/paid',{method:'POST',headers:{authorization:'Basic '+btoa('admin:'+env.ADMIN_PASSWORD)}});
+assert.equal((await worker.fetch(paidRequest,env,ctx)).status,200);await drain();
+assert.equal(resendCalls.length,4);assert.ok(resendCalls.slice(2).every(m=>m.subject.includes('confirmed')));
 const simultaneous=await Promise.all([1,3,4].map(course_id=>book(course_id,'16:00',course_id===4?70:60,{starts_at:'2026-11-18T16:00:00.000Z'})));
-assert.deepEqual(simultaneous.map(r=>r.status).sort(),[201,409,409],'only one concurrent request reserves an interval');
-assert.equal((await book(1,'16:00',60,{starts_at:'2026-11-19T16:00:00.000Z',email:'a@example.org,b@example.org'})).status,400,'reject multiple recipient addresses');
-// Password was changed earlier; verify private overview with the current password separately.
-const overview=await worker.fetch(new Request('https://test.example/api/admin/overview',{headers:{authorization:'Basic '+btoa('admin:'+env.ADMIN_PASSWORD)}}),env,ctx);
-assert.equal(overview.status,200);assert.ok((await overview.json()).emails.some(j=>j.booking_id===failedId&&j.status==='sent'));
-console.log('PASS: concurrent same-slot requests, single-recipient email validation and private delivery status.');
-console.log('PASS: end-to-end notification payload, queued failures/retry, persisted slot blocking, public-data privacy and protected retry.');
+assert.deepEqual(simultaneous.map(r=>r.status).sort(),[201,409,409]);
+assert.equal((await book(1,'16:00',60,{starts_at:'2026-11-19T16:00:00.000Z',email:'a@example.org,b@example.org'})).status,400);
+console.log('PASS: real booking/payment routes send four Resend messages, rejected overlaps send none, concurrency and public privacy.');
+
 const {PAYMENT_METHODS,paymentMethods,paymentInstructions}=await import('../src/payment-config.js');
+for(const m of PAYMENT_METHODS){m.recipient='';m.url='';m.qrPath='';}
 assert.deepEqual(paymentMethods(),[],'unset methods hidden');
 PAYMENT_METHODS[0].recipient='+1 512 555 0100';PAYMENT_METHODS[0].qrPath='/payments/zelle-qr.png';
 PAYMENT_METHODS[1].recipient='@test-tag';PAYMENT_METHODS[1].url='https://venmo.com/test-tag';
@@ -263,3 +251,4 @@ assert.equal(paymentMethods()[1].url,'');assert.equal(paymentMethods()[0].qr,'')
 for(const m of PAYMENT_METHODS){m.recipient='';m.url='';m.qrPath='';}
 console.log('PASS: Zelle/Venmo config, totals, blank defaults, unsafe URL/path rejection.');
 globalThis.fetch=originalFetch;Date.now=realNow;
+
