@@ -211,7 +211,7 @@ export default {
         }
         if (request.method === 'POST' && /^\/api\/admin\/bookings\/[a-f0-9-]+\/retry-email$/.test(path)) {
           const id=path.split('/')[4];
-          await env.DB.prepare("UPDATE email_jobs SET status='pending',attempts=0,next_attempt=0 WHERE booking_id=? AND status IN ('pending','failed') AND lease_until<=?").bind(id,Date.now()).run();
+          await env.DB.prepare("UPDATE email_jobs SET status='pending',next_attempt=0 WHERE booking_id=? AND status IN ('pending','failed') AND lease_until<=?").bind(id,Date.now()).run();
           ctx.waitUntil(deliverEmails(env,id));
           return json({ok:true});
         }
@@ -235,7 +235,10 @@ export default {
               FROM bookings b JOIN sessions s ON s.id=b.session_id
               JOIN courses c ON c.id=s.course_id
               LEFT JOIN booking_addresses a ON a.booking_id=b.id ORDER BY b.created_at DESC LIMIT 300`).all(),
-            env.DB.prepare('SELECT id,booking_id,kind,status,attempts,last_error FROM email_jobs ORDER BY rowid DESC LIMIT 600').all()
+            env.DB.prepare(`SELECT j.id,j.booking_id,j.kind,j.status,j.attempts,j.last_error,j.next_attempt,
+              p.customer_status,p.instructor_status
+              FROM email_jobs j LEFT JOIN email_job_progress p ON p.job_id=j.id
+              ORDER BY j.rowid DESC LIMIT 600`).all()
           ]);
           return json({ courses: courses.results, sessions: sessions.results,
             bookings: bookings.results, emails: emails.results });

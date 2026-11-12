@@ -14,6 +14,12 @@ export function ensureSetup(db) {
       status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
       next_attempt INTEGER NOT NULL DEFAULT 0, lease_until INTEGER NOT NULL DEFAULT 0,
       delivered_at TEXT, last_error TEXT, UNIQUE(booking_id,kind))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS email_job_progress (
+      job_id TEXT PRIMARY KEY REFERENCES email_jobs(id),
+      first_attempt_at INTEGER NOT NULL,
+      customer_status TEXT,
+      instructor_status TEXT
+    )`),
     db.prepare(`UPDATE courses SET duration_minutes=60 WHERE title='Small Group Yoga' AND duration_minutes=70`)
   ]).catch(e=>{ready.delete(db);throw e;}));
   return ready.get(db);
