@@ -113,8 +113,19 @@ function renderDays(){
     row.append(node('summary',dayLabel.format(date)));
     const slots=node('div','','slots');
     for(const time of ['08:00','10:00','14:00','17:30']){
-      if(!available(startFor(day,time)))continue;
-      const b=button(timeLabel(time),()=>pick(day,time));b.disabled=!available(startFor(day,time));b.classList.toggle('selected',chosenDay===day && chosenTime===time);b.setAttribute('aria-pressed',String(chosenDay===day && chosenTime===time));slots.append(b);
+      // Hide out-of-hours presets, but keep occupied times visible.
+      const start=startFor(day,time);
+      if(!bookableStart(start))continue;
+      const b=button(timeLabel(time),()=>pick(day,time));
+      b.disabled=!available(start);
+      if(b.disabled){
+        const status=live || pagesPreview?'Unavailable':'Not verified';
+        b.append(node('small',status,'slot-status'));
+        b.setAttribute('aria-label',timeLabel(time)+' — '+status.toLowerCase());
+      }
+      b.classList.toggle('selected',chosenDay===day && chosenTime===time);
+      b.setAttribute('aria-pressed',String(chosenDay===day && chosenTime===time));
+      slots.append(b);
     }
     if(!slots.children.length)slots.append(node('p','No preset times available. Try another date or a custom time.','muted'));
     const custom=node('div','','custom-time');custom.hidden=true;
